@@ -13,7 +13,7 @@
     "ingest:fdc": "tsx src/ingest/fdc.ts",
     "ingest:off": "tsx src/ingest/off.ts",
     "dedupe:fdc": "tsx src/maintenance/dedupe-fdc.ts",
-    "denormalize:fdc": "tsx src/maintenance/denormalize-fdc.ts",
+    "denormalize:fdc": "tsx src/maintenance/run-denormalize.ts",
     "counts": "tsx src/counts.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit"

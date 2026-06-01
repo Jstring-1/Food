@@ -41,14 +41,3 @@ export async function denormalizeFdc(): Promise<void> {
   console.log(`updated ${(res.rowCount ?? 0).toLocaleString()} foods`);
   await pool.query('VACUUM ANALYZE fdc_food');
 }
-
-// Allow running standalone.
-if (import.meta.url === `file://${process.argv[1]?.replace(/\\/g, '/')}`) {
-  denormalizeFdc()
-    .then(() => pool.end())
-    .then(() => console.log('Denormalize complete.'))
-    .catch((err) => {
-      console.error(err);
-      process.exit(1);
-    });
-}
