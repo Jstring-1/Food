@@ -25,13 +25,41 @@ async function loadStats() {
   } catch { statsEl.textContent = ''; }
 }
 
+const $ = (id) => document.getElementById(id);
+const isBarcode = (s) => /^\d{6,14}$/.test(s);
+
+// Read the filter controls into URLSearchParams for /api/search.
+function readFilters(q) {
+  const p = new URLSearchParams({ q });
+  p.set('source', $('f-source').value);
+  p.set('usdatype', $('f-usdatype').value);
+  p.set('nutriscore', $('f-nutriscore').value);
+  p.set('sort', $('f-sort').value);
+  p.set('hideEmpty', $('f-hideempty').checked ? '1' : '0');
+  const ranges = { minKcal: 'f-minkcal', maxKcal: 'f-maxkcal', minProtein: 'f-minprotein', maxProtein: 'f-maxprotein',
+    minSugar: 'f-minsugar', maxSugar: 'f-maxsugar', minFat: 'f-minfat', maxFat: 'f-maxfat' };
+  for (const [key, id] of Object.entries(ranges)) if ($(id).value !== '') p.set(key, $(id).value);
+  return p;
+}
+
+// Show/hide source-specific filters.
+function syncFilterVisibility() {
+  const s = $('f-source').value;
+  document.querySelectorAll('[data-when="not-off"]').forEach((el) => (el.style.display = s === 'off' ? 'none' : ''));
+  document.querySelectorAll('[data-when="not-usda"]').forEach((el) => (el.style.display = s === 'usda' ? 'none' : ''));
+}
+
 let timer;
 qEl.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 250); });
+// Re-run immediately when any filter changes.
+document.querySelectorAll('.filters select, .filters input').forEach((el) => {
+  el.addEventListener('change', () => { if (el.id === 'f-source') syncFilterVisibility(); search(); });
+});
 
 async function search() {
   const v = qEl.value.trim();
-  if (v.length < 2) { resultsEl.innerHTML = ''; return; }
-  const r = await fetch('/api/search?q=' + encodeURIComponent(v));
+  if (!isBarcode(v) && v.length < 2) { resultsEl.innerHTML = ''; return; }
+  const r = await fetch('/api/search?' + readFilters(v).toString());
   if (!r.ok) { resultsEl.innerHTML = '<div class="empty">…</div>'; return; }
   const { results } = await r.json();
   if (!results.length) { resultsEl.innerHTML = '<div class="empty">No matches.</div>'; return; }
@@ -39,10 +67,13 @@ async function search() {
   for (const item of results) {
     const b = document.createElement('button');
     b.className = 'result';
+    const grade = item.grade && /^[a-e]$/.test(item.grade)
+      ? `<span class="nutri nutri-${item.grade}">${item.grade.toUpperCase()}</span>` : '';
+    const kcal = item.kcal != null ? `<span class="kcal">${Math.round(item.kcal)} kcal/100g</span>` : '';
     b.innerHTML =
       `<span class="badge ${item.source}">${item.source}</span>` +
-      `<span class="title">${esc(item.title)}</span>` +
-      (item.sub ? `<div class="sub">${esc(item.sub)}</div>` : '');
+      `<span class="title">${esc(item.title)}</span>${grade}` +
+      (item.sub || kcal ? `<div class="sub">${esc(item.sub || '')}${kcal}</div>` : '');
     b.onclick = () => showLabel(item.source, item.id);
     resultsEl.appendChild(b);
   }
@@ -106,4 +137,5 @@ function renderLabel(d) {
   </div>`;
 }
 
+syncFilterVisibility();
 loadStats();

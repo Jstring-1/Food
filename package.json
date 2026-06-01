@@ -12,6 +12,7 @@
     "db:migrate": "tsx src/migrate.ts",
     "ingest:fdc": "tsx src/ingest/fdc.ts",
     "ingest:off": "tsx src/ingest/off.ts",
+    "dedupe:fdc": "tsx src/maintenance/dedupe-fdc.ts",
     "counts": "tsx src/counts.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit"

@@ -24,6 +24,25 @@ input[type="search"] {
 }
 input[type="search"]:focus { outline: none; border-color: #6e6eff; }
 
+/* ── Filter bar ──────────────────────────────────────────────── */
+.filters {
+  margin-top: .8rem; display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center;
+  font-size: .82rem; color: #9a9ab0;
+}
+.filters label { display: inline-flex; align-items: center; gap: .35rem; }
+.filters select, .filters input[type="number"] {
+  background: #16161f; color: #e6e6ef; border: 1px solid #33334a; border-radius: 6px;
+  padding: .3rem .4rem; font-size: .82rem;
+}
+.filters input[type="number"] { width: 4.5rem; }
+.filters .chk { cursor: pointer; }
+.filters .ranges { width: 100%; }
+.filters .ranges summary { cursor: pointer; color: #9aa0ff; font-size: .8rem; }
+.range-grid {
+  display: grid; grid-template-columns: max-content auto auto; gap: .4rem .6rem;
+  align-items: center; margin-top: .6rem; max-width: 320px;
+}
+
 .results { margin-top: 1rem; display: flex; flex-direction: column; }
 .result {
   text-align: left; width: 100%; background: none; border: none; cursor: pointer;
@@ -40,6 +59,16 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
 .badge.usda { background: #1f3d1f; color: #8fe08f; }
 .badge.off  { background: #1f2d3d; color: #8fc6e0; }
 .empty { color: #8a8aa0; padding: .7rem .6rem; }
+.kcal { color: #8a8aa0; }
+.result .sub .kcal { margin-left: .5rem; }
+/* Nutri-Score chip */
+.nutri { display: inline-block; margin-left: .5rem; font-size: .68rem; font-weight: 800;
+  color: #062; padding: .05rem .35rem; border-radius: 3px; vertical-align: middle; }
+.nutri-a { background: #038141; color: #fff; }
+.nutri-b { background: #85bb2f; color: #062; }
+.nutri-c { background: #fecb02; color: #5a4a00; }
+.nutri-d { background: #ee8100; color: #fff; }
+.nutri-e { background: #e63e11; color: #fff; }
 
 /* ── FDA-style Nutrition Facts label ───────────────────────────── */
 .label-panel { position: sticky; top: 1rem; }

@@ -24,7 +24,55 @@
 
   <main>
     <section class="search">
-      <input id="q" type="search" placeholder="Search foods — e.g. cheddar, banana, oat milk…" autofocus />
+      <input id="q" type="search" placeholder="Search foods or scan a barcode — e.g. cheddar, banana, 884853601023…" autofocus />
+
+      <div class="filters">
+        <label>Source
+          <select id="f-source">
+            <option value="all">All</option>
+            <option value="usda">USDA</option>
+            <option value="off">Open Food Facts</option>
+          </select>
+        </label>
+        <label data-when="not-off">USDA type
+          <select id="f-usdatype">
+            <option value="all">All</option>
+            <option value="branded">Branded</option>
+            <option value="whole">Whole foods</option>
+          </select>
+        </label>
+        <label data-when="not-usda">Nutri-Score
+          <select id="f-nutriscore">
+            <option value="all">Any</option>
+            <option value="a">A</option>
+            <option value="b">B</option>
+            <option value="c">C</option>
+            <option value="d">D</option>
+            <option value="e">E</option>
+          </select>
+        </label>
+        <label>Sort
+          <select id="f-sort">
+            <option value="relevance">Relevance</option>
+            <option value="name">Name</option>
+            <option value="kcal_desc">Calories ↓</option>
+            <option value="kcal_asc">Calories ↑</option>
+            <option value="protein_desc">Protein ↓</option>
+          </select>
+        </label>
+        <label class="chk"><input type="checkbox" id="f-hideempty" checked /> Hide entries with no nutrition</label>
+
+        <details class="ranges">
+          <summary>Nutrient ranges (per 100 g)</summary>
+          <div class="range-grid">
+            <span>Calories</span><input id="f-minkcal" type="number" min="0" placeholder="min" /><input id="f-maxkcal" type="number" min="0" placeholder="max" />
+            <span>Protein (g)</span><input id="f-minprotein" type="number" min="0" placeholder="min" /><input id="f-maxprotein" type="number" min="0" placeholder="max" />
+            <span>Sugar (g)</span><input id="f-minsugar" type="number" min="0" placeholder="min" /><input id="f-maxsugar" type="number" min="0" placeholder="max" />
+            <span>Fat (g)</span><input id="f-minfat" type="number" min="0" placeholder="min" /><input id="f-maxfat" type="number" min="0" placeholder="max" />
+          </div>
+        </details>
+      </div>
+
       <div id="results" class="results"></div>
     </section>
 

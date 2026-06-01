@@ -25,48 +25,145 @@ app.get('/api/stats', async (_req, res) => {
   }
 });
 
-// Search both sources by name.
+// Cache FDC nutrient ids used for range-filtering / sorting (per 100 g).
+let NUT_IDS: Record<'kcal' | 'protein' | 'sugars' | 'fat', number[]> | null = null;
+async function nutrientIds() {
+  if (NUT_IDS) return NUT_IDS;
+  const { rows } = await pool.query('SELECT id, name, unit_name FROM fdc_nutrient');
+  const ids = (pred: (r: any) => boolean) => rows.filter(pred).map((r) => r.id);
+  NUT_IDS = {
+    kcal: ids((r) => r.name === 'Energy' && r.unit_name === 'KCAL'),
+    protein: ids((r) => r.name === 'Protein'),
+    fat: ids((r) => r.name === 'Total lipid (fat)'),
+    sugars: ids((r) => ['Total Sugars', 'Sugars, Total', 'Sugars, total including NLEA'].includes(r.name)),
+  };
+  return NUT_IDS;
+}
+
+const numOrNull = (v: unknown) => {
+  const n = Number(v);
+  return v === '' || v == null || !Number.isFinite(n) ? null : n;
+};
+
+// Push >= / <= bounds for a column onto a params array, returning SQL fragments.
+function range(col: string, min: number | null, max: number | null, params: unknown[]): string[] {
+  const out: string[] = [];
+  if (min != null) { params.push(min); out.push(`${col} >= $${params.length}`); }
+  if (max != null) { params.push(max); out.push(`${col} <= $${params.length}`); }
+  return out;
+}
+
+const ORDER = {
+  usda: { name: 'f.description ASC', kcal_desc: 'kcal DESC NULLS LAST', kcal_asc: 'kcal ASC NULLS LAST', protein_desc: 'protein DESC NULLS LAST', relevance: 'f.description ASC' },
+  off: { name: 'product_name ASC', kcal_desc: 'kcal DESC NULLS LAST', kcal_asc: 'kcal ASC NULLS LAST', protein_desc: 'protein DESC NULLS LAST', relevance: 'product_name ASC' },
+} as const;
+
 app.get('/api/search', async (req, res) => {
   const q = String(req.query.q ?? '').trim();
-  if (q.length < 2) {
-    res.status(400).json({ error: 'query must be at least 2 characters' });
-    return;
+  const source = String(req.query.source ?? 'all'); // all | usda | off
+  const usdaType = String(req.query.usdaType ?? 'all'); // all | branded | whole
+  const nutriscore = String(req.query.nutriscore ?? 'all'); // all | a..e
+  const sort = (['name', 'kcal_desc', 'kcal_asc', 'protein_desc', 'relevance'].includes(String(req.query.sort)) ? String(req.query.sort) : 'relevance') as keyof typeof ORDER.usda;
+  const hideEmpty = String(req.query.hideEmpty ?? '1') !== '0';
+  const minKcal = numOrNull(req.query.minKcal), maxKcal = numOrNull(req.query.maxKcal);
+  const minProtein = numOrNull(req.query.minProtein), maxProtein = numOrNull(req.query.maxProtein);
+  const minSugar = numOrNull(req.query.minSugar), maxSugar = numOrNull(req.query.maxSugar);
+  const minFat = numOrNull(req.query.minFat), maxFat = numOrNull(req.query.maxFat);
+
+  const isBarcode = /^\d{6,14}$/.test(q);
+  if (!isBarcode && q.length < 2) {
+    return void res.status(400).json({ error: 'query must be at least 2 characters' });
   }
-  const like = `%${q}%`;
+
   try {
-    const [fdc, off] = await Promise.all([
-      pool.query(
-        `SELECT fdc_id, description, data_type, food_category
-           FROM fdc_food WHERE description ILIKE $1 ORDER BY description LIMIT 25`,
-        [like],
-      ),
-      pool.query(
-        `SELECT code, product_name, brands
-           FROM off_product
-          WHERE product_name ILIKE $1 AND product_name IS NOT NULL
-          ORDER BY product_name LIMIT 25`,
-        [like],
-      ),
-    ]);
-    const results = [
-      ...fdc.rows.map((r) => ({
-        source: 'usda',
-        id: String(r.fdc_id),
-        title: r.description,
-        sub: r.food_category || r.data_type?.replace(/_/g, ' '),
-      })),
-      ...off.rows.map((r) => ({
-        source: 'off',
-        id: r.code,
-        title: r.product_name,
-        sub: r.brands || '',
-      })),
-    ];
-    res.json({ results });
+    const out: any[] = [];
+
+    // ── Barcode lookup: exact match on OFF code + USDA gtin_upc ──
+    if (isBarcode) {
+      if (source !== 'off') {
+        const r = await pool.query(
+          `SELECT f.fdc_id, f.description FROM fdc_branded b JOIN fdc_food f ON f.fdc_id=b.fdc_id
+            WHERE b.gtin_upc = $1 LIMIT 25`, [q]);
+        out.push(...r.rows.map((x) => ({ source: 'usda', id: String(x.fdc_id), title: x.description, sub: `barcode ${q}` })));
+      }
+      if (source !== 'usda') {
+        const r = await pool.query(
+          `SELECT code, product_name, brands FROM off_product WHERE code = $1 LIMIT 25`, [q]);
+        out.push(...r.rows.map((x) => ({ source: 'off', id: x.code, title: x.product_name || '(unnamed)', sub: x.brands || `barcode ${q}` })));
+      }
+      return void res.json({ results: out, mode: 'barcode' });
+    }
+
+    const like = `%${q}%`;
+    const ids = await nutrientIds();
+    const tasks: Promise<void>[] = [];
+
+    // ── USDA ──
+    if (source !== 'off') {
+      const p: unknown[] = [like, ids.kcal, ids.protein, ids.sugars, ids.fat];
+      const where = ['f.description ILIKE $1'];
+      if (usdaType === 'branded') where.push(`f.data_type = 'branded_food'`);
+      if (usdaType === 'whole') where.push(`f.data_type <> 'branded_food'`);
+      where.push(...range('kcal', minKcal, maxKcal, p));
+      where.push(...range('protein', minProtein, maxProtein, p));
+      where.push(...range('sugars', minSugar, maxSugar, p));
+      where.push(...range('fat', minFat, maxFat, p));
+      if (hideEmpty) where.push('kcal IS NOT NULL');
+      const sql = `
+        SELECT f.fdc_id, f.description, f.data_type, f.food_category, kcal, protein, sugars, fat FROM fdc_food f
+        LEFT JOIN LATERAL (SELECT amount kcal FROM fdc_food_nutrient n WHERE n.fdc_id=f.fdc_id AND n.nutrient_id = ANY($2) LIMIT 1) ek ON true
+        LEFT JOIN LATERAL (SELECT amount protein FROM fdc_food_nutrient n WHERE n.fdc_id=f.fdc_id AND n.nutrient_id = ANY($3) LIMIT 1) pr ON true
+        LEFT JOIN LATERAL (SELECT amount sugars FROM fdc_food_nutrient n WHERE n.fdc_id=f.fdc_id AND n.nutrient_id = ANY($4) LIMIT 1) sg ON true
+        LEFT JOIN LATERAL (SELECT amount fat FROM fdc_food_nutrient n WHERE n.fdc_id=f.fdc_id AND n.nutrient_id = ANY($5) LIMIT 1) ft ON true
+        WHERE ${where.join(' AND ')} ORDER BY ${ORDER.usda[sort]} LIMIT 25`;
+      tasks.push(pool.query(sql, p).then((r) => {
+        out.push(...r.rows.map((x) => ({ source: 'usda', id: String(x.fdc_id), title: x.description, sub: x.food_category || x.data_type?.replace(/_/g, ' '), kcal: x.kcal, protein: x.protein, sugars: x.sugars, fat: x.fat })));
+      }));
+    }
+
+    // ── OFF ──
+    if (source !== 'usda') {
+      const p: unknown[] = [like];
+      const where = ['product_name ILIKE $1', 'product_name IS NOT NULL'];
+      if (/^[a-e]$/.test(nutriscore)) { p.push(nutriscore); where.push(`nutriscore_grade = $${p.length}`); }
+      where.push(...range('energy_kcal_100g', minKcal, maxKcal, p));
+      where.push(...range('proteins_100g', minProtein, maxProtein, p));
+      where.push(...range('sugars_100g', minSugar, maxSugar, p));
+      where.push(...range('fat_100g', minFat, maxFat, p));
+      if (hideEmpty) where.push('energy_kcal_100g IS NOT NULL');
+      const sql = `
+        SELECT code, product_name, brands, nutriscore_grade,
+               energy_kcal_100g kcal, proteins_100g protein, sugars_100g sugars, fat_100g fat
+          FROM off_product WHERE ${where.join(' AND ')} ORDER BY ${ORDER.off[sort]} LIMIT 25`;
+      tasks.push(pool.query(sql, p).then((r) => {
+        out.push(...r.rows.map((x) => ({ source: 'off', id: x.code, title: x.product_name, sub: x.brands || '', grade: x.nutriscore_grade, kcal: x.kcal, protein: x.protein, sugars: x.sugars, fat: x.fat })));
+      }));
+    }
+
+    await Promise.all(tasks);
+
+    // Merge-sort across sources for the chosen order.
+    const ql = q.toLowerCase();
+    if (sort === 'kcal_desc') out.sort((a, b) => (b.kcal ?? -1) - (a.kcal ?? -1));
+    else if (sort === 'kcal_asc') out.sort((a, b) => (a.kcal ?? Infinity) - (b.kcal ?? Infinity));
+    else if (sort === 'protein_desc') out.sort((a, b) => (b.protein ?? -1) - (a.protein ?? -1));
+    else if (sort === 'name') out.sort((a, b) => a.title.localeCompare(b.title));
+    else out.sort((a, b) => relevance(a.title, ql) - relevance(b.title, ql)); // relevance
+
+    res.json({ results: out.slice(0, 40) });
   } catch (err) {
     res.status(500).json({ error: 'query failed', detail: String(err) });
   }
 });
+
+// Lower score = better: exact, then prefix, then word-boundary, then substring.
+function relevance(title: string, ql: string): number {
+  const t = (title || '').toLowerCase();
+  if (t === ql) return 0;
+  if (t.startsWith(ql)) return 1;
+  if (new RegExp(`\\b${ql.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(t)) return 2;
+  return 3;
+}
 
 // FDC nutrient name -> normalized label field. Units already match the label
 // (G / MG / UG=mcg) so amounts pass through unscaled by unit.
