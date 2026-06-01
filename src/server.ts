@@ -140,11 +140,15 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
-// Human-readable serving label for a branded row.
+// Human-readable serving label for a branded row. Rounds float noise and maps
+// FDC unit codes (GRM->g, MLT->ml).
 function servingText(r: any): string {
-  const u = (r.serving_size_unit || '').trim();
-  if (r.household_serving) return r.serving_size ? `${r.household_serving} (${r.serving_size} ${u})` : r.household_serving;
-  if (r.serving_size) return `${r.serving_size} ${u}`.trim();
+  const map: Record<string, string> = { grm: 'g', mlt: 'ml' };
+  const raw = (r.serving_size_unit || '').trim();
+  const u = map[raw.toLowerCase()] || raw;
+  const size = r.serving_size != null ? Number(r.serving_size).toLocaleString('en-US', { maximumFractionDigits: 1 }) : null;
+  if (r.household_serving) return size ? `${r.household_serving} (${size} ${u})` : r.household_serving;
+  if (size) return `${size} ${u}`.trim();
   return 'per 100 g';
 }
 
@@ -229,13 +233,11 @@ async function fdcLabel(id: number) {
 
   // Scale to serving when the branded serving is a mass/volume (per-100g basis).
   let factor = 1;
-  let servingText = 'per 100 g';
+  let serving = 'per 100 g';
   const unit = (f.serving_size_unit || '').toLowerCase();
   if (f.serving_size && ['g', 'ml', 'grm', 'mlt'].includes(unit)) {
     factor = Number(f.serving_size) / 100;
-    servingText = f.household_serving
-      ? `${f.household_serving} (${f.serving_size} ${unit})`
-      : `${f.serving_size} ${unit}`;
+    serving = servingText(f);
   }
 
   const n: Record<string, number | null> = {};
@@ -250,7 +252,7 @@ async function fdcLabel(id: number) {
     title: f.description,
     brand: f.brand_name || f.brand_owner || '',
     category: f.food_category || f.data_type?.replace(/_/g, ' ') || '',
-    servingText,
+    servingText: serving,
     ingredients: f.ingredients || '',
     n,
   };
