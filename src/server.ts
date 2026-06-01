@@ -76,29 +76,30 @@ app.get('/api/search', async (req, res) => {
   }
 
   try {
-    const out: any[] = [];
-
     // ── Barcode lookup: exact match on OFF code + USDA gtin_upc ──
     if (isBarcode) {
+      const bc: any[] = [];
       if (source !== 'off') {
         const r = await pool.query(
           `SELECT f.fdc_id, f.description FROM fdc_branded b JOIN fdc_food f ON f.fdc_id=b.fdc_id
             WHERE b.gtin_upc = $1 LIMIT 25`, [q]);
-        out.push(...r.rows.map((x) => ({ source: 'usda', id: String(x.fdc_id), title: x.description, sub: `barcode ${q}` })));
+        bc.push(...r.rows.map((x) => ({ source: 'usda', id: String(x.fdc_id), title: x.description, sub: `barcode ${q}`, variantCount: 1 })));
       }
       if (source !== 'usda') {
         const r = await pool.query(
           `SELECT code, product_name, brands FROM off_product WHERE code = $1 LIMIT 25`, [q]);
-        out.push(...r.rows.map((x) => ({ source: 'off', id: x.code, title: x.product_name || '(unnamed)', sub: x.brands || `barcode ${q}` })));
+        bc.push(...r.rows.map((x) => ({ source: 'off', id: x.code, title: x.product_name || '(unnamed)', sub: x.brands || `barcode ${q}`, variantCount: 1 })));
       }
-      return void res.json({ results: out, mode: 'barcode' });
+      return void res.json({ results: bc, mode: 'barcode' });
     }
 
     const like = `%${q}%`;
     const ids = await nutrientIds();
     const tasks: Promise<void>[] = [];
+    const usdaRows: any[] = [];
+    const offRows: any[] = [];
 
-    // ── USDA ──
+    // ── USDA ── (fetch extra so post-grouping still yields a full page)
     if (source !== 'off') {
       const p: unknown[] = [like, ids.kcal, ids.protein, ids.sugars, ids.fat];
       const where = ['f.description ILIKE $1'];
@@ -110,18 +111,19 @@ app.get('/api/search', async (req, res) => {
       where.push(...range('fat', minFat, maxFat, p));
       if (hideEmpty) where.push('kcal IS NOT NULL');
       const sql = `
-        SELECT f.fdc_id, f.description, f.data_type, f.food_category, kcal, protein, sugars, fat FROM fdc_food f
+        SELECT f.fdc_id, f.description, f.data_type, f.food_category, kcal, protein, sugars, fat,
+               coalesce(b.brand_name, b.brand_owner) AS brand,
+               b.serving_size, b.serving_size_unit, b.household_serving FROM fdc_food f
+        LEFT JOIN fdc_branded b ON b.fdc_id = f.fdc_id
         LEFT JOIN LATERAL (SELECT amount kcal FROM fdc_food_nutrient n WHERE n.fdc_id=f.fdc_id AND n.nutrient_id = ANY($2) LIMIT 1) ek ON true
         LEFT JOIN LATERAL (SELECT amount protein FROM fdc_food_nutrient n WHERE n.fdc_id=f.fdc_id AND n.nutrient_id = ANY($3) LIMIT 1) pr ON true
         LEFT JOIN LATERAL (SELECT amount sugars FROM fdc_food_nutrient n WHERE n.fdc_id=f.fdc_id AND n.nutrient_id = ANY($4) LIMIT 1) sg ON true
         LEFT JOIN LATERAL (SELECT amount fat FROM fdc_food_nutrient n WHERE n.fdc_id=f.fdc_id AND n.nutrient_id = ANY($5) LIMIT 1) ft ON true
-        WHERE ${where.join(' AND ')} ORDER BY ${ORDER.usda[sort]} LIMIT 25`;
-      tasks.push(pool.query(sql, p).then((r) => {
-        out.push(...r.rows.map((x) => ({ source: 'usda', id: String(x.fdc_id), title: x.description, sub: x.food_category || x.data_type?.replace(/_/g, ' '), kcal: x.kcal, protein: x.protein, sugars: x.sugars, fat: x.fat })));
-      }));
+        WHERE ${where.join(' AND ')} ORDER BY ${ORDER.usda[sort]} LIMIT 80`;
+      tasks.push(pool.query(sql, p).then((r) => { usdaRows.push(...r.rows); }));
     }
 
-    // ── OFF ──
+    // ── OFF ── (already one row per barcode; no grouping needed)
     if (source !== 'usda') {
       const p: unknown[] = [like];
       const where = ['product_name ILIKE $1', 'product_name IS NOT NULL'];
@@ -134,13 +136,14 @@ app.get('/api/search', async (req, res) => {
       const sql = `
         SELECT code, product_name, brands, nutriscore_grade,
                energy_kcal_100g kcal, proteins_100g protein, sugars_100g sugars, fat_100g fat
-          FROM off_product WHERE ${where.join(' AND ')} ORDER BY ${ORDER.off[sort]} LIMIT 25`;
+          FROM off_product WHERE ${where.join(' AND ')} ORDER BY ${ORDER.off[sort]} LIMIT 40`;
       tasks.push(pool.query(sql, p).then((r) => {
-        out.push(...r.rows.map((x) => ({ source: 'off', id: x.code, title: x.product_name, sub: x.brands || '', grade: x.nutriscore_grade, kcal: x.kcal, protein: x.protein, sugars: x.sugars, fat: x.fat })));
+        offRows.push(...r.rows.map((x) => ({ source: 'off', id: x.code, title: x.product_name, sub: x.brands || '', grade: x.nutriscore_grade, kcal: x.kcal, protein: x.protein, sugars: x.sugars, fat: x.fat, variantCount: 1 })));
       }));
     }
 
     await Promise.all(tasks);
+    const out = [...groupUsda(usdaRows), ...offRows];
 
     // Merge-sort across sources for the chosen order.
     const ql = q.toLowerCase();
@@ -155,6 +158,37 @@ app.get('/api/search', async (req, res) => {
     res.status(500).json({ error: 'query failed', detail: String(err) });
   }
 });
+
+// Human-readable serving label for a branded row.
+function servingText(r: any): string {
+  const u = (r.serving_size_unit || '').trim();
+  if (r.household_serving) return r.serving_size ? `${r.household_serving} (${r.serving_size} ${u})` : r.household_serving;
+  if (r.serving_size) return `${r.serving_size} ${u}`.trim();
+  return 'per 100 g';
+}
+
+// Merge near-duplicate USDA rows into one result per (brand + normalized name).
+// Normalization is conservative — lowercase, punctuation/space-insensitive —
+// so it collapses cosmetic differences without merging distinct products.
+// Each group exposes its members as variants (for the serving dropdown).
+function groupUsda(rows: any[]): any[] {
+  const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const map = new Map<string, any>();
+  for (const r of rows) {
+    const key = norm(r.brand) + '|' + norm(r.description);
+    let g = map.get(key);
+    if (!g) {
+      g = {
+        source: 'usda', id: String(r.fdc_id), title: r.description,
+        sub: r.food_category || r.data_type?.replace(/_/g, ' '),
+        kcal: r.kcal, protein: r.protein, sugars: r.sugars, fat: r.fat, variants: [] as any[],
+      };
+      map.set(key, g);
+    }
+    g.variants.push({ id: String(r.fdc_id), serving: servingText(r) });
+  }
+  return [...map.values()].map((g) => ({ ...g, variantCount: g.variants.length }));
+}
 
 // Lower score = better: exact, then prefix, then word-boundary, then substring.
 function relevance(title: string, ql: string): number {

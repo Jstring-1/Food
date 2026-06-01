@@ -61,6 +61,13 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
 .empty { color: #8a8aa0; padding: .7rem .6rem; }
 .kcal { color: #8a8aa0; }
 .result .sub .kcal { margin-left: .5rem; }
+.vcount { margin-left: .5rem; color: #9aa0ff; }
+/* Variant / serving dropdown above the label */
+.variant-pick { display: block; font-size: .8rem; color: #9a9ab0; margin-bottom: .6rem; }
+.variant-pick select {
+  display: block; margin-top: .25rem; width: 100%; max-width: 320px;
+  background: #16161f; color: #e6e6ef; border: 1px solid #33334a; border-radius: 6px; padding: .35rem .4rem;
+}
 /* Nutri-Score chip */
 .nutri { display: inline-block; margin-left: .5rem; font-size: .68rem; font-weight: 800;
   color: #062; padding: .05rem .35rem; border-radius: 3px; vertical-align: middle; }

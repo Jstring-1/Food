@@ -70,21 +70,41 @@ async function search() {
     const grade = item.grade && /^[a-e]$/.test(item.grade)
       ? `<span class="nutri nutri-${item.grade}">${item.grade.toUpperCase()}</span>` : '';
     const kcal = item.kcal != null ? `<span class="kcal">${Math.round(item.kcal)} kcal/100g</span>` : '';
+    const vc = item.variantCount > 1 ? `<span class="vcount">· ${item.variantCount} variants</span>` : '';
     b.innerHTML =
       `<span class="badge ${item.source}">${item.source}</span>` +
       `<span class="title">${esc(item.title)}</span>${grade}` +
-      (item.sub || kcal ? `<div class="sub">${esc(item.sub || '')}${kcal}</div>` : '');
-    b.onclick = () => showLabel(item.source, item.id);
+      `<div class="sub">${esc(item.sub || '')}${kcal}${vc}</div>`;
+    b.onclick = () => showLabel(item.source, item.id, item.variants);
     resultsEl.appendChild(b);
   }
 }
 
-async function showLabel(source, id) {
-  labelEl.innerHTML = '<p class="meta">loading…</p>';
+async function showLabel(source, id, variants) {
   panelEl.hidden = false;
+  // Merged USDA results expose multiple entries — let the user pick which one.
+  let header = '';
+  if (variants && variants.length > 1) {
+    header =
+      `<label class="variant-pick">Serving / variant (${variants.length})
+        <select id="variant-select">` +
+      variants.map((v) => `<option value="${esc(v.id)}">${esc(v.serving)}</option>`).join('') +
+      `</select></label>`;
+  }
+  labelEl.innerHTML = header + '<div id="label-body"><p class="meta">loading…</p></div>';
+  if (variants && variants.length > 1) {
+    const sel = document.getElementById('variant-select');
+    sel.value = id;
+    sel.addEventListener('change', () => renderInto(source, sel.value));
+  }
+  renderInto(source, id);
+}
+
+async function renderInto(source, id) {
+  const body = document.getElementById('label-body');
   const r = await fetch(`/api/food?source=${source}&id=${encodeURIComponent(id)}`);
-  if (!r.ok) { labelEl.innerHTML = '<p class="meta">Could not load.</p>'; return; }
-  labelEl.innerHTML = renderLabel(await r.json());
+  if (!r.ok) { body.innerHTML = '<p class="meta">Could not load.</p>'; return; }
+  body.innerHTML = renderLabel(await r.json());
 }
 
 // One label row: label text (+amount) and a %DV cell.
