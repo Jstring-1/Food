@@ -2,12 +2,17 @@ import { once } from 'node:events';
 import { finished } from 'node:stream/promises';
 import type { Writable } from 'node:stream';
 
+// NUL byte (0x00) — valid UTF-8 but rejected by Postgres text columns.
+// Built via fromCharCode to keep this source file free of control bytes.
+const NUL = String.fromCharCode(0);
+
 // Escape one value for PostgreSQL COPY ... FROM STDIN (text format).
 // Empty/undefined/null all map to NULL (\N).
 export function esc(v: unknown): string {
   if (v === null || v === undefined) return '\\N';
   if (v instanceof Date) return v.toISOString();
-  const s = typeof v === 'string' ? v : String(v);
+  // Strip NUL bytes (Open Food Facts free-text fields occasionally contain them).
+  const s = (typeof v === 'string' ? v : String(v)).split(NUL).join('');
   if (s === '') return '\\N';
   return s
     .replace(/\\/g, '\\\\')
