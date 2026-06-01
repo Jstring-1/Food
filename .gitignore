@@ -9,3 +9,8 @@ data/
 *.jsonl
 *.jsonl.gz
 *.zip
+
+# GI source supplements (copyrighted) and scratch output — not redistributed
+*.pdf
+*.docx
+_*.txt
