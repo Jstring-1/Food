@@ -279,20 +279,16 @@ async function fdcLabel(id: number) {
     return row?.amount != null ? Number(row.amount) : null;
   };
 
-  // Scale to serving when the branded serving is a mass/volume (per-100g basis).
-  let factor = 1;
-  let serving = 'per 100 g';
-  const unit = (f.serving_size_unit || '').toLowerCase();
-  if (f.serving_size && ['g', 'ml', 'grm', 'mlt'].includes(unit)) {
-    factor = Number(f.serving_size) / 100;
-    serving = servingText(f);
-  }
-
+  // Values are per 100 g; the client scales them to the chosen serving.
   const n: Record<string, number | null> = {};
   for (const [field, spec] of Object.entries(FDC_NUTRIENTS)) {
     const v = find(spec);
-    n[field] = v == null ? null : +(v * factor).toFixed(2);
+    n[field] = v == null ? null : +v.toFixed(3);
   }
+
+  const unit = (f.serving_size_unit || '').toLowerCase();
+  const servingGrams =
+    f.serving_size && ['g', 'ml', 'grm', 'mlt'].includes(unit) ? Number(f.serving_size) : null;
 
   return {
     source: 'usda',
@@ -300,10 +296,25 @@ async function fdcLabel(id: number) {
     title: f.description,
     brand: f.brand_name || f.brand_owner || '',
     category: f.food_category || f.data_type?.replace(/_/g, ' ') || '',
-    servingText: serving,
+    servings: buildServings(servingGrams, f.household_serving),
     ingredients: f.ingredients || '',
     n,
   };
+}
+
+const OZ_G = 28.3495;
+const round1 = (x: number) => Math.round(x * 10) / 10;
+
+// Build the serving-size options the label calculator offers. The product's
+// own serving (when its grams are known) is first and becomes the default.
+function buildServings(servingGrams: number | null, household: string | null): { label: string; grams: number }[] {
+  const out: { label: string; grams: number }[] = [];
+  if (servingGrams && servingGrams > 0) {
+    out.push({ label: household ? `${household} (${round1(servingGrams)} g)` : `1 serving (${round1(servingGrams)} g)`, grams: servingGrams });
+  }
+  out.push({ label: '100 g', grams: 100 });
+  out.push({ label: '1 oz (28.3 g)', grams: OZ_G });
+  return out;
 }
 
 async function offLabel(code: string) {
@@ -311,13 +322,21 @@ async function offLabel(code: string) {
   if (r.rowCount === 0) return null;
   const p = r.rows[0];
   const num = (v: unknown) => (v == null ? null : Number(v));
+
+  // Parse grams from the free-text serving_size (e.g. "30 g", "1 cup (240 ml)").
+  const servings: { label: string; grams: number }[] = [];
+  const m = p.serving_size ? String(p.serving_size).match(/([\d.]+)\s*(g|ml|gram|grams)\b/i) : null;
+  if (m) servings.push({ label: String(p.serving_size).trim(), grams: Number(m[1]) });
+  servings.push({ label: '100 g', grams: 100 });
+  servings.push({ label: '1 oz (28.3 g)', grams: OZ_G });
+
   return {
     source: 'off',
     id: p.code,
     title: p.product_name || '(unnamed product)',
     brand: p.brands || '',
     category: p.categories ? String(p.categories).split(',')[0] : '',
-    servingText: p.serving_size ? `${p.serving_size} — values per 100 g` : 'per 100 g',
+    servings,
     ingredients: p.ingredients_text || '',
     n: {
       energyKcal: num(p.energy_kcal_100g),

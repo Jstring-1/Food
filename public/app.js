@@ -21,7 +21,7 @@ async function loadStats() {
     const total = (s.usda || 0) + (s.off || 0);
     statsEl.innerHTML =
       `<b>${total.toLocaleString()}</b> foods in the database` +
-      `<span class="breakdown">${s.usda.toLocaleString()} USDA · ${s.off.toLocaleString()} Open Food Facts</span>`;
+      ` · ${s.usda.toLocaleString()} USDA · ${s.off.toLocaleString()} Open Food Facts`;
   } catch { statsEl.textContent = ''; }
 }
 
@@ -104,7 +104,15 @@ async function renderInto(source, id) {
   const body = document.getElementById('label-body');
   const r = await fetch(`/api/food?source=${source}&id=${encodeURIComponent(id)}`);
   if (!r.ok) { body.innerHTML = '<p class="meta">Could not load.</p>'; return; }
-  body.innerHTML = renderLabel(await r.json());
+  paintLabel(body, await r.json(), 0);
+}
+
+// Render the label at serving index `idx`, wiring the serving dropdown to
+// re-render (and recalculate every value) when a different serving is picked.
+function paintLabel(body, d, idx) {
+  body.innerHTML = renderLabel(d, idx);
+  const sel = body.querySelector('#serving-select');
+  if (sel) { sel.selectedIndex = idx; sel.onchange = () => paintLabel(body, d, sel.selectedIndex); }
 }
 
 // One label row: label text (+amount) and a %DV cell.
@@ -115,8 +123,14 @@ function row(cls, label, field, n, { bold = false } = {}) {
   return `<tr><td class="${cls}">${name}${amount}</td><td class="dv">${dv(field, v)}</td></tr>`;
 }
 
-function renderLabel(d) {
-  const n = d.n;
+function renderLabel(d, idx = 0) {
+  const servings = d.servings && d.servings.length ? d.servings : [{ label: '100 g', grams: 100 }];
+  const grams = servings[idx]?.grams ?? 100;
+  const factor = grams / 100;
+  // Scale every per-100g value to the chosen serving.
+  const n = {};
+  for (const k in d.n) n[k] = d.n[k] == null ? null : d.n[k] * factor;
+
   const cal = n.energyKcal == null ? '—' : Math.round(n.energyKcal);
   const added = n.addedSugars == null ? '' :
     `<tr><td class="ind2">Includes ${fmt(n.addedSugars, 'g')} Added Sugars</td><td class="dv">${dv('addedSugars', n.addedSugars)}</td></tr>`;
@@ -129,12 +143,14 @@ function renderLabel(d) {
       return `<tr><td>${names[f]} ${fmt(n[f], UNIT[f])}</td><td class="dv">${dv(f, n[f])}</td></tr>`;
     }).join('');
 
+  const options = servings.map((s, i) => `<option value="${i}">${esc(s.label)}</option>`).join('');
+
   return `
   <div class="nf">
     ${d.brand ? `<p class="brand">${esc(d.brand)}</p>` : ''}
     <p class="name">${esc(d.title)}</p>
     <p class="title">Nutrition Facts</p>
-    <p class="serving">Serving: ${esc(d.servingText)}</p>
+    <p class="serving">Amount per <select id="serving-select" class="serving-select">${options}</select></p>
     <div class="bar"></div>
     <div class="cal-row"><span class="lbl">Calories</span><span class="val">${cal}</span></div>
     <p class="dv-head">% Daily Value*</p>

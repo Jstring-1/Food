@@ -4,20 +4,31 @@ body {
   font: 16px/1.5 system-ui, -apple-system, sans-serif;
   margin: 0; background: #0e0e14; color: #e6e6ef;
 }
-header, footer { max-width: 980px; margin: 0 auto; padding: 1.5rem 1rem; }
-header h1 { margin: 0 0 .25rem; font-size: 1.6rem; }
+header {
+  max-width: 980px; margin: 0 auto; padding: 1rem;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .75rem;
+}
+header .brand { font-size: 1rem; font-weight: 800; color: #e6e6ef; text-decoration: none; }
+header .brand:hover { color: #9aa0ff; }
+footer { max-width: 980px; margin: 0 auto; padding: 1rem; }
 .meta { color: #8a8aa0; font-size: .9rem; margin: 0; }
 .meta a { color: #9aa0ff; }
-#stats { font-size: 1rem; color: #b9b9d0; }
+#stats { font-size: 1rem; color: #8a8aa0; }
 #stats b { color: #e6e6ef; }
-#stats .breakdown { display: block; font-size: .72rem; color: #6e6e85; margin-top: .1rem; }
 footer .meta { font-size: .62rem; line-height: 1.4; color: #6e6e85; }
 
 main {
-  max-width: 980px; margin: 0 auto; padding: 0 1rem 4rem;
+  max-width: 980px; margin: 0 auto; padding: 0 1rem 2rem;
   display: grid; grid-template-columns: 1fr; gap: 2rem;
 }
-@media (min-width: 760px) { main { grid-template-columns: 1fr 340px; align-items: start; } }
+@media (min-width: 760px) {
+  /* Desktop: header + footer + search form + label stay put; only results scroll. */
+  body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  main { flex: 1; min-height: 0; width: 100%; grid-template-columns: 1fr 340px; align-items: stretch; padding-bottom: 1rem; }
+  .search { display: flex; flex-direction: column; min-height: 0; }
+  .results { flex: 1; min-height: 0; overflow-y: auto; }
+  .label-panel { position: static; align-self: start; max-height: 100%; overflow-y: auto; }
+}
 
 input[type="search"] {
   width: 100%; padding: .8rem 1rem; font-size: 1rem; border-radius: 10px;
@@ -69,9 +80,9 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
   display: block; margin-top: .25rem; width: 100%; max-width: 320px;
   background: #16161f; color: #e6e6ef; border: 1px solid #33334a; border-radius: 6px; padding: .35rem .4rem;
 }
-/* Nutri-Score chip */
-.nutri { display: inline-block; margin-left: .5rem; font-size: .68rem; font-weight: 800;
-  color: #062; padding: .05rem .35rem; border-radius: 3px; vertical-align: middle; }
+/* Nutri-Score chip — same footprint as the source badge */
+.nutri { display: inline-block; margin-left: .5rem; font-size: .62rem; font-weight: 800;
+  letter-spacing: .06em; padding: .1rem .4rem; border-radius: 4px; vertical-align: middle; }
 .nutri-a { background: #038141; color: #fff; }
 .nutri-b { background: #85bb2f; color: #062; }
 .nutri-c { background: #fecb02; color: #5a4a00; }
@@ -79,7 +90,7 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
 .nutri-e { background: #e63e11; color: #fff; }
 
 /* ── FDA-style Nutrition Facts label ───────────────────────────── */
-.label-panel { position: sticky; top: 1rem; }
+.label-panel { }
 .nf {
   background: #fff; color: #000; width: 100%; max-width: 320px;
   border: 1px solid #000; padding: 6px 9px; font-family: Helvetica, Arial, sans-serif;
@@ -89,6 +100,8 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
 .nf .name { font-size: 14px; font-weight: bold; line-height: 1.2; margin-bottom: 2px; }
 .nf .title { font-size: 30px; font-weight: 800; border-bottom: 1px solid #000; letter-spacing: -.5px; }
 .nf .serving { font-size: 12px; padding: 2px 0; }
+.nf .serving-select { font: inherit; font-size: 12px; color: #000; background: #fff;
+  border: 1px solid #000; border-radius: 3px; padding: 1px 3px; max-width: 200px; }
 .nf .bar { border-top: 10px solid #000; }
 .nf .cal-row { display: flex; justify-content: space-between; align-items: baseline;
   border-bottom: 4px solid #000; padding: 2px 0; }
