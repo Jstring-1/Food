@@ -94,13 +94,24 @@ app.get('/api/search', async (req, res) => {
       where.push(...range('f.sugars_100g', minSugar, maxSugar, p));
       where.push(...range('f.fat_100g', minFat, maxFat, p));
       if (hideEmpty) where.push('f.energy_kcal_100g IS NOT NULL');
+      // Relevance: prefix match, then whole/foundation foods over branded,
+      // then shortest (most generic) name — so canonical foods surface first.
+      let orderBy: string = ORDER.usda[sort];
+      if (sort === 'relevance') {
+        p.push(q + '%');
+        orderBy = `(f.description ILIKE $${p.length}) DESC,
+          CASE f.data_type WHEN 'foundation_food' THEN 0 WHEN 'sr_legacy_food' THEN 0
+                           WHEN 'survey_fndds_food' THEN 2 WHEN 'branded_food' THEN 4 ELSE 3 END ASC,
+          length(f.description) ASC, f.description ASC`;
+      }
       const sql = `
         SELECT f.fdc_id, f.description, f.data_type, f.food_category,
+               (f.data_type <> 'branded_food') AS whole,
                f.energy_kcal_100g kcal, f.protein_100g protein, f.sugars_100g sugars, f.fat_100g fat,
                coalesce(b.brand_name, b.brand_owner) AS brand,
                b.serving_size, b.serving_size_unit, b.household_serving FROM fdc_food f
         LEFT JOIN fdc_branded b ON b.fdc_id = f.fdc_id
-        WHERE ${where.join(' AND ')} ORDER BY ${ORDER.usda[sort]} LIMIT 80`;
+        WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT 80`;
       tasks.push(pool.query(sql, p).then((r) => { usdaRows.push(...r.rows); }));
     }
 
@@ -114,12 +125,17 @@ app.get('/api/search', async (req, res) => {
       where.push(...range('sugars_100g', minSugar, maxSugar, p));
       where.push(...range('fat_100g', minFat, maxFat, p));
       if (hideEmpty) where.push('energy_kcal_100g IS NOT NULL');
+      let orderBy: string = ORDER.off[sort];
+      if (sort === 'relevance') {
+        p.push(q + '%');
+        orderBy = `(product_name ILIKE $${p.length}) DESC, length(product_name) ASC, product_name ASC`;
+      }
       const sql = `
         SELECT code, product_name, brands, nutriscore_grade,
                energy_kcal_100g kcal, proteins_100g protein, sugars_100g sugars, fat_100g fat
-          FROM off_product WHERE ${where.join(' AND ')} ORDER BY ${ORDER.off[sort]} LIMIT 40`;
+          FROM off_product WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT 40`;
       tasks.push(pool.query(sql, p).then((r) => {
-        offRows.push(...r.rows.map((x) => ({ source: 'off', id: x.code, title: x.product_name, sub: x.brands || '', grade: x.nutriscore_grade, kcal: x.kcal, protein: x.protein, sugars: x.sugars, fat: x.fat, variantCount: 1 })));
+        offRows.push(...r.rows.map((x) => ({ source: 'off', id: x.code, title: x.product_name, brand: x.brands || '', sub: x.brands || '', grade: x.nutriscore_grade, kcal: x.kcal, protein: x.protein, sugars: x.sugars, fat: x.fat, dataType: 'off', variantCount: 1 })));
       }));
     }
 
@@ -132,9 +148,9 @@ app.get('/api/search', async (req, res) => {
     else if (sort === 'kcal_asc') out.sort((a, b) => (a.kcal ?? Infinity) - (b.kcal ?? Infinity));
     else if (sort === 'protein_desc') out.sort((a, b) => (b.protein ?? -1) - (a.protein ?? -1));
     else if (sort === 'name') out.sort((a, b) => a.title.localeCompare(b.title));
-    else out.sort((a, b) => relevance(a.title, ql) - relevance(b.title, ql)); // relevance
+    else out.sort((a, b) => scoreItem(a, ql) - scoreItem(b, ql)); // relevance
 
-    res.json({ results: out.slice(0, 40) });
+    res.json({ results: dedupeByTitleBrand(out).slice(0, 40) });
   } catch (err) {
     res.status(500).json({ error: 'query failed', detail: String(err) });
   }
@@ -164,8 +180,8 @@ function groupUsda(rows: any[]): any[] {
     let g = map.get(key);
     if (!g) {
       g = {
-        source: 'usda', id: String(r.fdc_id), title: r.description,
-        sub: r.food_category || r.data_type?.replace(/_/g, ' '),
+        source: 'usda', id: String(r.fdc_id), title: r.description, brand: r.brand || '',
+        sub: r.food_category || r.data_type?.replace(/_/g, ' '), dataType: r.data_type,
         kcal: r.kcal, protein: r.protein, sugars: r.sugars, fat: r.fat, variants: [] as any[],
       };
       map.set(key, g);
@@ -175,13 +191,45 @@ function groupUsda(rows: any[]): any[] {
   return [...map.values()].map((g) => ({ ...g, variantCount: g.variants.length }));
 }
 
-// Lower score = better: exact, then prefix, then word-boundary, then substring.
-function relevance(title: string, ql: string): number {
-  const t = (title || '').toLowerCase();
-  if (t === ql) return 0;
-  if (t.startsWith(ql)) return 1;
-  if (new RegExp(`\\b${ql.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(t)) return 2;
-  return 3;
+// Lower score = better. Blends match quality (exact > prefix > word-start >
+// substring), a whole/foundation-food boost, and a shorter-name preference so
+// canonical foods ("Bananas, raw", "Cheerios Cereal") beat long branded names.
+// Source/type tier — USDA analytical raw foods rank above survey dishes and
+// branded/OFF packaged products, so staples beat prepared/branded items.
+const TIER: Record<string, number> = {
+  foundation_food: 2800,
+  sr_legacy_food: 2800, // same tier as foundation; comma + shortest name picks the generic
+  survey_fndds_food: 1800,
+};
+
+function scoreItem(item: any, ql: string): number {
+  const t = (item.title || '').toLowerCase();
+  const e = ql.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let s = -(TIER[item.dataType] ?? 0);
+  // Match quality. USDA names staples in the plural ("Apples, raw"), so allow
+  // an optional plural suffix. "Food, modifier" (comma) is the canonical staple
+  // naming and beats "Apple juice" / "Banana split".
+  const pl = `${e}(?:es|s)?`;
+  if (t === ql) s -= 1500;
+  else if (new RegExp(`^${pl}\\s*,`).test(t)) s -= 1100; // "Apples, raw"
+  else if (new RegExp(`^${pl}\\b`).test(t)) s -= 800; // "Apple juice"
+  else if (t.startsWith(ql)) s -= 500; // prefix
+  else if (new RegExp(`\\b${e}`).test(t)) s -= 250; // word-boundary elsewhere
+  s += Math.min(t.length, 120); // shorter, more generic names rank higher
+  return s;
+}
+
+// Collapse identical name+brand entries (common OFF noise: many "banana" rows).
+function dedupeByTitleBrand(items: any[]): any[] {
+  const seen = new Set<string>();
+  const out: any[] = [];
+  for (const it of items) {
+    const key = `${(it.title || '').toLowerCase().trim()}|${(it.brand || '').toLowerCase().trim()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(it);
+  }
+  return out;
 }
 
 // FDC nutrient name -> normalized label field. Units already match the label
