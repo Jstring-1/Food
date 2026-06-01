@@ -16,6 +16,22 @@ function escHtml(s: unknown): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 }
 
+// Public JSON API: permissive CORS + a light per-IP fixed-window rate limit.
+const RATE = new Map<string, { n: number; t: number }>();
+app.use('/api', (req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  if (req.method === 'OPTIONS') return void res.sendStatus(204);
+  const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || 'x';
+  const now = Date.now();
+  if (RATE.size > 20000) RATE.clear(); // crude memory cap
+  const slot = RATE.get(ip);
+  if (!slot || now - slot.t > 60_000) RATE.set(ip, { n: 1, t: now });
+  else if (slot.n >= 120) return void res.status(429).json({ error: 'rate limit: 120 requests/minute' });
+  else slot.n++;
+  next();
+});
+
 // Liveness probe — never touches the DB.
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
@@ -539,6 +555,83 @@ app.get('/sitemaps/:source/:page.xml', async (req, res) => {
     );
   } catch {
     res.status(503).end();
+  }
+});
+
+// Minimal content-page shell (for non-SPA pages like docs and leaders).
+function contentPage(title: string, desc: string, body: string): string {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>${escHtml(title)}</title><meta name="description" content="${escHtml(desc)}"/>
+<link rel="canonical" href="${ORIGIN}/"/><link rel="stylesheet" href="/styles.css"/></head>
+<body><header><a href="/" class="brand">FoodLand.fyi</a></header>
+<main style="display:block;max-width:760px"><div class="page">${body}</div></main>
+<footer><p class="meta"><a href="/">Search</a> · <a href="/leaders">Leaders</a> · <a href="/developers">API</a></p></footer>
+</body></html>`;
+}
+
+// ── Developer API docs ─────────────────────────────────────────────────────
+app.get('/developers', (_req, res) => {
+  const body = `<h1>FoodLand.fyi API</h1>
+    <p class="page-lead">Free read-only JSON API over USDA FoodData Central + Open Food Facts. CORS-enabled, rate-limited to 120 requests/minute per IP. No key required.</p>
+    <h2>GET /api/search</h2>
+    <p>Params: <code>q</code> (2+ chars or a 6–14 digit barcode), <code>source</code> (all|usda|off), <code>usdatype</code> (all|branded|whole), <code>sort</code> (relevance|name|kcal_desc|kcal_asc|protein_desc), <code>minKcal/maxKcal/minProtein/maxProtein/minSugar/maxSugar/minFat/maxFat</code> (per 100 g).</p>
+    <pre>curl "${ORIGIN}/api/search?q=cheddar&amp;source=usda&amp;sort=protein_desc"</pre>
+    <h2>GET /api/food</h2>
+    <p>Params: <code>source</code> (usda|off), <code>id</code> (USDA fdc_id or OFF barcode). Returns the normalized label (per-100 g nutrients, serving options, ingredients, allergens, diet flags).</p>
+    <pre>curl "${ORIGIN}/api/food?source=usda&amp;id=167512"</pre>
+    <h2>GET /api/stats</h2>
+    <p>Row counts per source.</p>
+    <h2>Attribution</h2>
+    <p>Data from <a href="https://fdc.nal.usda.gov/">USDA FoodData Central</a> (public domain) and <a href="https://world.openfoodfacts.org/">Open Food Facts</a> (ODbL). Open Food Facts data is licensed under the <a href="https://opendatacommons.org/licenses/odbl/1-0/">Open Database License</a>; reuse must attribute and share alike.</p>`;
+  res.type('html').send(contentPage('API — FoodLand.fyi', 'Free JSON nutrition API over 5M+ foods.', body));
+});
+
+// ── Leaders (SEO landing pages) ────────────────────────────────────────────
+type Leader = { label: string; usdaCol?: string; offCol?: string; unit: string; mul?: number; max: number };
+// max is the realistic per-100g ceiling in the column's native unit (grams),
+// to filter out data-entry errors that otherwise dominate the rankings.
+const LEADERS: Record<string, Leader> = {
+  'high-protein': { label: 'Highest-protein foods', usdaCol: 'protein_100g', offCol: 'proteins_100g', unit: 'g', max: 90 },
+  'high-fiber': { label: 'Highest-fiber foods', offCol: 'fiber_100g', unit: 'g', max: 80 },
+  'high-calcium': { label: 'Highest-calcium foods', offCol: 'calcium_100g', unit: 'mg', mul: 1000, max: 2 },
+  'high-iron': { label: 'Highest-iron foods', offCol: 'iron_100g', unit: 'mg', mul: 1000, max: 0.05 },
+  'high-potassium': { label: 'Highest-potassium foods', offCol: 'potassium_100g', unit: 'mg', mul: 1000, max: 5 },
+  'high-vitamin-c': { label: 'Highest vitamin C foods', offCol: 'vitamin_c_100g', unit: 'mg', mul: 1000, max: 5 },
+};
+
+app.get('/leaders', (_req, res) => {
+  const links = Object.entries(LEADERS).map(([slug, l]) => `<li><a href="/leaders/${slug}">${escHtml(l.label)}</a></li>`).join('');
+  res.type('html').send(contentPage('Nutrient leaders — FoodLand.fyi', 'Foods ranked by nutrient, per 100 g.',
+    `<h1>Nutrient leaders</h1><p class="page-lead">Foods ranked by nutrient content per 100 g.</p><ul class="leader-index">${links}</ul>`));
+});
+
+app.get('/leaders/:slug', async (req, res) => {
+  const l = LEADERS[req.params.slug];
+  if (!l) return void res.status(404).type('html').send(contentPage('Not found', '', '<h1>Not found</h1><p><a href="/leaders">All leaders</a></p>'));
+  try {
+    const parts: any[] = [];
+    if (l.usdaCol) parts.push(pool.query(
+      `SELECT 'usda' src, fdc_id::text id, description title, ${l.usdaCol} v FROM fdc_food
+        WHERE ${l.usdaCol} > 0 AND ${l.usdaCol} <= $1 AND data_type <> 'branded_food'
+        ORDER BY ${l.usdaCol} DESC LIMIT 60`, [l.max]));
+    if (l.offCol) parts.push(pool.query(
+      `SELECT 'off' src, code id, product_name title, ${l.offCol} v FROM off_product
+        WHERE ${l.offCol} > 0 AND ${l.offCol} <= $1 AND product_name IS NOT NULL ORDER BY ${l.offCol} DESC LIMIT 60`, [l.max]));
+    const rows = (await Promise.all(parts)).flatMap((r) => r.rows);
+    const seen = new Set<string>();
+    const items = rows
+      .map((r) => ({ ...r, val: Number(r.v) * (l.mul ?? 1) }))
+      .sort((a, b) => b.val - a.val)
+      .filter((r) => { const k = (r.title || '').toLowerCase(); if (!r.title || seen.has(k)) return false; seen.add(k); return true; })
+      .slice(0, 50);
+    const list = items.map((r, i) =>
+      `<li><span class="rank">${i + 1}</span><a href="/food/${r.src}/${encodeURIComponent(r.id)}">${escHtml(r.title)}</a>
+       <span class="lv">${r.val.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${l.unit}/100 g</span></li>`).join('');
+    res.type('html').send(contentPage(`${l.label} | FoodLand.fyi`, `${l.label} ranked per 100 g.`,
+      `<h1>${escHtml(l.label)}</h1><p class="page-lead">Top foods by ${escHtml(l.unit)} per 100 g. <a href="/leaders">All leaders</a></p><ol class="leaders">${list}</ol>`));
+  } catch {
+    res.status(503).type('html').send(contentPage('Unavailable', '', '<h1>Temporarily unavailable</h1>'));
   }
 });
 

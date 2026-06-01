@@ -139,3 +139,20 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
 .macros .macro-legend { list-style: none; margin: 0; padding: 0; font-size: 11px; color: #000; }
 .macros .macro-legend li { display: flex; align-items: center; gap: 6px; padding: 1px 0; }
 .macros .macro-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* ── Content pages (docs, leaders) ─────────────────────────────── */
+.page { padding: .5rem 0 2rem; }
+.page h1 { font-size: 1.4rem; margin: .5rem 0; }
+.page h2 { font-size: 1rem; margin-top: 1.4rem; color: #cfcfe0; }
+.page-lead { color: #9a9ab0; }
+.page pre { background: #16161f; border: 1px solid #33334a; border-radius: 8px; padding: .6rem .8rem; overflow: auto; font-size: .82rem; }
+.page code { background: #16161f; border: 1px solid #2a2a3a; border-radius: 4px; padding: 0 .25rem; }
+.page a { color: #9aa0ff; }
+.leaders, .leader-index { list-style: none; padding: 0; }
+.leaders li { display: flex; align-items: baseline; gap: .6rem; padding: .4rem 0; border-bottom: 1px solid #22222e; }
+.leaders .rank { color: #6e6e85; width: 1.6rem; text-align: right; font-variant-numeric: tabular-nums; }
+.leaders a { color: #e6e6ef; text-decoration: none; flex: 1; }
+.leaders a:hover { color: #9aa0ff; }
+.leaders .lv { color: #8fe08f; font-size: .85rem; white-space: nowrap; }
+.leader-index li { padding: .3rem 0; }
+.leader-index a { color: #9aa0ff; }
