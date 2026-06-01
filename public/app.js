@@ -33,9 +33,8 @@ function readFilters(q) {
   const p = new URLSearchParams({ q });
   p.set('source', $('f-source').value);
   p.set('usdatype', $('f-usdatype').value);
-  p.set('nutriscore', $('f-nutriscore').value);
   p.set('sort', $('f-sort').value);
-  p.set('hideEmpty', $('f-hideempty').checked ? '1' : '0');
+  p.set('hideEmpty', '1'); // always hide entries with no nutrition
   const ranges = { minKcal: 'f-minkcal', maxKcal: 'f-maxkcal', minProtein: 'f-minprotein', maxProtein: 'f-maxprotein',
     minSugar: 'f-minsugar', maxSugar: 'f-maxsugar', minFat: 'f-minfat', maxFat: 'f-maxfat' };
   for (const [key, id] of Object.entries(ranges)) if ($(id).value !== '') p.set(key, $(id).value);
