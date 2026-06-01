@@ -6,10 +6,10 @@ const statsEl = document.getElementById('stats');
 
 // FDA Daily Values (2,000 kcal) and display units per normalized field.
 const DV = { fat: 78, satFat: 20, cholesterol: 300, sodium: 2300, carbs: 275,
-  fiber: 28, addedSugars: 50, vitaminD: 20, calcium: 1300, iron: 18, potassium: 4700 };
+  fiber: 28, addedSugars: 50, vitaminD: 20, calcium: 1300, iron: 18, potassium: 4700, vitaminC: 90 };
 const UNIT = { fat: 'g', satFat: 'g', transFat: 'g', cholesterol: 'mg', sodium: 'mg',
   carbs: 'g', fiber: 'g', sugars: 'g', addedSugars: 'g', protein: 'g',
-  vitaminD: 'mcg', calcium: 'mg', iron: 'mg', potassium: 'mg' };
+  vitaminD: 'mcg', calcium: 'mg', iron: 'mg', potassium: 'mg', vitaminC: 'mg' };
 
 function esc(s) { const e = document.createElement('div'); e.textContent = s ?? ''; return e.innerHTML; }
 function fmt(v, unit) { return v == null ? null : `${(+v).toLocaleString(undefined, { maximumFractionDigits: 1 })}${unit}`; }
@@ -136,10 +136,10 @@ function renderLabel(d, idx = 0) {
     `<tr><td class="ind2">Includes ${fmt(n.addedSugars, 'g')} Added Sugars</td><td class="dv">${dv('addedSugars', n.addedSugars)}</td></tr>`;
 
   // Micros only render when present (USDA has them; OFF usually doesn't).
-  const micros = ['vitaminD', 'calcium', 'iron', 'potassium']
+  const micros = ['vitaminD', 'calcium', 'iron', 'potassium', 'vitaminC']
     .filter((f) => n[f] != null)
     .map((f) => {
-      const names = { vitaminD: 'Vitamin D', calcium: 'Calcium', iron: 'Iron', potassium: 'Potassium' };
+      const names = { vitaminD: 'Vitamin D', calcium: 'Calcium', iron: 'Iron', potassium: 'Potassium', vitaminC: 'Vitamin C' };
       return `<tr><td>${names[f]} ${fmt(n[f], UNIT[f])}</td><td class="dv">${dv(f, n[f])}</td></tr>`;
     }).join('');
 

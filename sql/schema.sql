@@ -96,9 +96,21 @@ CREATE TABLE IF NOT EXISTS off_product (
   fiber_100g          DOUBLE PRECISION,
   salt_100g           DOUBLE PRECISION,
   sodium_100g         DOUBLE PRECISION,
+  -- Common micronutrients (per 100 g, stored in grams as OFF provides them).
+  vitamin_d_100g      DOUBLE PRECISION,
+  calcium_100g        DOUBLE PRECISION,
+  iron_100g           DOUBLE PRECISION,
+  potassium_100g      DOUBLE PRECISION,
+  vitamin_c_100g      DOUBLE PRECISION,
   nutriments          JSONB,                   -- full nutrient array; null unless OFF_NUTRIMENTS_JSON=1
   last_modified       TIMESTAMPTZ
 );
+
+ALTER TABLE off_product ADD COLUMN IF NOT EXISTS vitamin_d_100g DOUBLE PRECISION;
+ALTER TABLE off_product ADD COLUMN IF NOT EXISTS calcium_100g   DOUBLE PRECISION;
+ALTER TABLE off_product ADD COLUMN IF NOT EXISTS iron_100g      DOUBLE PRECISION;
+ALTER TABLE off_product ADD COLUMN IF NOT EXISTS potassium_100g DOUBLE PRECISION;
+ALTER TABLE off_product ADD COLUMN IF NOT EXISTS vitamin_c_100g DOUBLE PRECISION;
 
 CREATE INDEX IF NOT EXISTS off_name_trgm ON off_product USING gin (product_name gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS off_brands_idx ON off_product USING gin (brands gin_trgm_ops);

@@ -60,6 +60,11 @@ function transformSql(file: string): string {
       ${per100g('fiber')}              AS fiber_100g,
       ${per100g('salt')}               AS salt_100g,
       ${per100g('sodium')}             AS sodium_100g,
+      ${per100g('vitamin-d')}          AS vitamin_d_100g,
+      ${per100g('calcium')}            AS calcium_100g,
+      ${per100g('iron')}               AS iron_100g,
+      ${per100g('potassium')}          AS potassium_100g,
+      ${per100g('vitamin-c')}          AS vitamin_c_100g,
       ${INCLUDE_JSON ? 'to_json(nutriments)' : 'NULL'} AS nutriments,
       CASE WHEN last_modified_t IS NOT NULL THEN to_timestamp(last_modified_t) END AS last_modified
     FROM read_parquet('${file.replace(/\\/g, '/')}')
@@ -73,6 +78,7 @@ const COPY_SQL = `COPY off_product (
   nutriscore_grade, nova_group, countries,
   energy_kcal_100g, proteins_100g, fat_100g, saturated_fat_100g, carbohydrates_100g,
   sugars_100g, fiber_100g, salt_100g, sodium_100g,
+  vitamin_d_100g, calcium_100g, iron_100g, potassium_100g, vitamin_c_100g,
   nutriments, last_modified
 ) FROM STDIN WITH (FORMAT text)`;
 
@@ -97,6 +103,11 @@ function toLine(r: any): string {
     r.fiber_100g,
     r.salt_100g,
     r.sodium_100g,
+    r.vitamin_d_100g,
+    r.calcium_100g,
+    r.iron_100g,
+    r.potassium_100g,
+    r.vitamin_c_100g,
     r.nutriments,
     r.last_modified,
   );

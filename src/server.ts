@@ -250,6 +250,7 @@ const FDC_NUTRIENTS: Record<string, { names: string[]; unit?: string }> = {
   calcium: { names: ['Calcium, Ca'] },
   iron: { names: ['Iron, Fe'] },
   potassium: { names: ['Potassium, K'] },
+  vitaminC: { names: ['Vitamin C, total ascorbic acid'] },
 };
 
 async function fdcLabel(id: number) {
@@ -322,6 +323,16 @@ async function offLabel(code: string) {
   if (r.rowCount === 0) return null;
   const p = r.rows[0];
   const num = (v: unknown) => (v == null ? null : Number(v));
+  // OFF micronutrients are stored as grams/100g, with occasional garbage
+  // (negatives, absurd maxima). Sanitize, then convert to label units.
+  const gToMg = (v: unknown) => {
+    const n = v == null ? null : Number(v);
+    return n == null || n < 0 || n > 100 ? null : +(n * 1000).toFixed(2);
+  };
+  const gToMcg = (v: unknown) => {
+    const n = v == null ? null : Number(v);
+    return n == null || n < 0 || n > 100 ? null : +(n * 1_000_000).toFixed(1);
+  };
 
   // Parse grams from the free-text serving_size (e.g. "30 g", "1 cup (240 ml)").
   const servings: { label: string; grams: number }[] = [];
@@ -350,10 +361,11 @@ async function offLabel(code: string) {
       sugars: num(p.sugars_100g),
       addedSugars: null,
       protein: num(p.proteins_100g),
-      vitaminD: null,
-      calcium: null,
-      iron: null,
-      potassium: null,
+      vitaminD: gToMcg(p.vitamin_d_100g),
+      calcium: gToMg(p.calcium_100g),
+      iron: gToMg(p.iron_100g),
+      potassium: gToMg(p.potassium_100g),
+      vitaminC: gToMg(p.vitamin_c_100g),
     },
   };
 }
