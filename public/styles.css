@@ -225,3 +225,16 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
   text-decoration: underline dotted; text-underline-offset: 2px; }
 .additive-warn.avoid { color: #8a0016; background: #ffdcdc; text-decoration-color: #b00020; }
 .additive-warn.caution { color: #6b4500; background: #ffedc2; text-decoration-color: #b07b00; }
+
+/* ── Glycemic / diabetic block ─────────────────────────────────── */
+.gly-viz { max-width: 320px; margin-top: 10px; padding: 10px 12px; background: #16161f;
+  border: 1px solid #2a2a3a; border-radius: 8px; }
+.gly-grid { display: flex; gap: 8px; }
+.gly-card { flex: 1; background: #0e0e14; border: 1px solid #2a2a3a; border-radius: 6px;
+  padding: 8px 6px; text-align: center; }
+.gly-n { display: block; font-size: 1.25rem; font-weight: 800; color: #e6e6ef; line-height: 1.1; }
+.gly-l { display: block; font-size: .62rem; color: #8a8aa0; margin-top: 3px; text-transform: uppercase; letter-spacing: .03em; }
+.gly-n.gi-low { color: #5fbf77; }
+.gly-n.gi-medium { color: #e6c07a; }
+.gly-n.gi-high { color: #e8806b; }
+.gly-src { margin: 8px 0 0; font-size: .68rem; color: #8a8aa0; line-height: 1.35; }

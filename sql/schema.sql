@@ -118,3 +118,17 @@ ALTER TABLE off_product ADD COLUMN IF NOT EXISTS diet_tags      TEXT;
 
 CREATE INDEX IF NOT EXISTS off_name_trgm ON off_product USING gin (product_name gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS off_brands_idx ON off_product USING gin (brands gin_trgm_ops);
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- Glycemic Index reference values (for whole foods). Seeded from published
+-- International Tables of GI; optionally extended via npm run ingest:gi with a
+-- CSV (GI_CSV). Matched to USDA whole foods by keyword at label time.
+-- ──────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS gi_values (
+  id        SERIAL PRIMARY KEY,
+  name      TEXT NOT NULL,
+  gi        INTEGER NOT NULL,        -- glucose = 100 scale
+  category  TEXT,                    -- low | medium | high
+  source    TEXT,
+  keywords  TEXT[] NOT NULL          -- all must appear in a food's description to match
+);

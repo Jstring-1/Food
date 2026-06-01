@@ -294,8 +294,27 @@ function renderLabel(d, idx = 0) {
     ${d.diet && d.diet.length ? `<p class="nf-diet">${d.diet.map((x) => `<span class="diet-badge">${esc(x)}</span>`).join('')}</p>` : ''}
     ${ingredientsHtml(d.ingredients)}
   </div>
+  ${glyViz(n, d)}
   ${sugarViz(n.sugars)}
   <button type="button" class="dl-label">⬇ Download label as image</button>`;
+}
+
+// Diabetic-relevant block: net carbs (always), plus GI/GL when GI is known.
+function glyViz(n, d) {
+  if (n.carbs == null) return '';
+  const net = Math.max(0, n.carbs - (n.fiber || 0));
+  let cards = `<div class="gly-card"><span class="gly-n">${net.toLocaleString(undefined, { maximumFractionDigits: 1 })}g</span><span class="gly-l">Net carbs</span></div>`;
+  let src;
+  if (d.gi != null) {
+    const gl = (d.gi * net) / 100;
+    const glCat = gl <= 10 ? 'low' : gl <= 19 ? 'medium' : 'high';
+    cards += `<div class="gly-card"><span class="gly-n gi-${d.giCategory}">${d.gi}</span><span class="gly-l">Glycemic Index · ${d.giCategory}</span></div>`;
+    cards += `<div class="gly-card"><span class="gly-n gi-${glCat}">${gl.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span><span class="gly-l">Glycemic Load · ${glCat}</span></div>`;
+    src = `<p class="gly-src">GI from published tables (≈ "${esc(d.giSource)}"). GL = GI × net carbs ÷ 100, per serving.</p>`;
+  } else {
+    src = `<p class="gly-src">Net carbs = total carbs − fiber. Glycemic index not available for this food.</p>`;
+  }
+  return `<div class="gly-viz"><div class="gly-grid">${cards}</div>${src}</div>`;
 }
 
 // Visualize sugar as ~4 g sugar cubes for the current serving.

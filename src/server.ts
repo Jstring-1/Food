@@ -179,6 +179,23 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
+// Glycemic-index lookup (cached). Matched to whole foods by keyword.
+let GI_CACHE: { gi: number; category: string; name: string; keywords: string[] }[] | null = null;
+async function giValues() {
+  if (GI_CACHE) return GI_CACHE;
+  try { GI_CACHE = (await pool.query('SELECT gi, category, name, keywords FROM gi_values')).rows; }
+  catch { GI_CACHE = []; }
+  return GI_CACHE;
+}
+async function matchGi(desc: string) {
+  const d = (desc || '').toLowerCase();
+  let best: any = null;
+  for (const e of await giValues()) {
+    if (e.keywords.every((k: string) => d.includes(k)) && (!best || e.keywords.length > best.keywords.length)) best = e;
+  }
+  return best;
+}
+
 // Human-readable serving label for a branded row. Rounds float noise and maps
 // FDC unit codes (GRM->g, MLT->ml).
 function servingText(r: any): string {
@@ -314,6 +331,9 @@ async function fdcLabel(id: number) {
   const servingGrams =
     f.serving_size && ['g', 'ml', 'grm', 'mlt'].includes(unit) ? Number(f.serving_size) : null;
 
+  // Glycemic index applies to whole/generic foods, not arbitrary branded items.
+  const g = f.data_type !== 'branded_food' ? await matchGi(f.description) : null;
+
   return {
     source: 'usda',
     id: String(f.fdc_id),
@@ -327,6 +347,9 @@ async function fdcLabel(id: number) {
     grade: null,
     allergens: [],
     diet: [],
+    gi: g ? g.gi : null,
+    giCategory: g ? g.category : null,
+    giSource: g ? g.name : null,
   };
 }
 
@@ -398,6 +421,7 @@ async function offLabel(code: string) {
     grade: /^[a-e]$/.test(p.nutriscore_grade || '') ? p.nutriscore_grade : null,
     allergens: parseAllergens(p.allergens),
     diet: parseDiet(p.diet_tags),
+    gi: null, giCategory: null, giSource: null,
   };
 }
 
