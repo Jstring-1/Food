@@ -209,3 +209,12 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
   padding: .5rem .8rem; font-size: .85rem; cursor: pointer;
 }
 .dl-label:hover { border-color: #6e6eff; color: #c9ccff; }
+
+/* ── Info popup (leaders / API) ────────────────────────────────── */
+.info-modal { position: fixed; inset: 0; z-index: 40; background: rgba(8,8,12,.8);
+  display: flex; align-items: flex-start; justify-content: center; padding: 5vh 1rem; overflow: auto; }
+.info-card { position: relative; background: #0e0e14; border: 1px solid #33334a; border-radius: 12px;
+  max-width: 760px; width: 100%; padding: 1.5rem 1.75rem; }
+.info-close { position: absolute; top: .6rem; right: .6rem; background: none; border: 1px solid #33334a;
+  color: #e6e6ef; border-radius: 6px; padding: .25rem .55rem; cursor: pointer; }
+.info-close:hover { border-color: #6e6eff; }

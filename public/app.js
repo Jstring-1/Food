@@ -304,6 +304,44 @@ function macroRing(n) {
     </div>`;
 }
 
+// ── Info popups: show the server-rendered /leaders and /developers pages
+// in a modal instead of navigating (the real pages stay for SEO/direct links).
+const infoModal = document.getElementById('info-modal');
+const infoContent = document.getElementById('info-content');
+
+async function openInfo(url) {
+  infoModal.hidden = false;
+  infoContent.innerHTML = '<p class="meta" style="padding:1rem">Loading…</p>';
+  try {
+    const html = await (await fetch(url)).text();
+    const page = new DOMParser().parseFromString(html, 'text/html').querySelector('.page');
+    infoContent.innerHTML = page ? page.outerHTML : '<p class="meta" style="padding:1rem">Could not load.</p>';
+    wireInfoLinks();
+    infoContent.scrollTop = 0;
+  } catch {
+    infoContent.innerHTML = '<p class="meta" style="padding:1rem">Could not load.</p>';
+  }
+}
+
+function wireInfoLinks() {
+  infoContent.querySelectorAll('a[href^="/leaders"]').forEach((a) => {
+    a.onclick = (e) => { e.preventDefault(); openInfo(a.getAttribute('href')); };
+  });
+  infoContent.querySelectorAll('a[href^="/food/"]').forEach((a) => {
+    a.onclick = (e) => {
+      e.preventDefault();
+      const m = a.getAttribute('href').match(/\/food\/(usda|off)\/(.+)$/);
+      if (m) { infoModal.hidden = true; showLabel(m[1], decodeURIComponent(m[2])); }
+    };
+  });
+}
+
+document.getElementById('info-close').onclick = () => { infoModal.hidden = true; };
+infoModal.onclick = (e) => { if (e.target === infoModal) infoModal.hidden = true; };
+document.querySelectorAll('footer a[href="/leaders"], footer a[href="/developers"]').forEach((a) => {
+  a.onclick = (e) => { e.preventDefault(); openInfo(a.getAttribute('href')); };
+});
+
 syncFilterVisibility();
 loadStats();
 
