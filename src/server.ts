@@ -300,6 +300,10 @@ async function fdcLabel(id: number) {
     servings: buildServings(servingGrams, f.household_serving),
     ingredients: f.ingredients || '',
     n,
+    nova: null,
+    grade: null,
+    allergens: [],
+    diet: [],
   };
 }
 
@@ -367,7 +371,35 @@ async function offLabel(code: string) {
       potassium: gToMg(p.potassium_100g),
       vitaminC: gToMg(p.vitamin_c_100g),
     },
+    nova: p.nova_group == null ? null : Number(p.nova_group),
+    grade: /^[a-e]$/.test(p.nutriscore_grade || '') ? p.nutriscore_grade : null,
+    allergens: parseAllergens(p.allergens),
+    diet: parseDiet(p.diet_tags),
   };
+}
+
+// Parse OFF tag strings ("en:milk,en:soybeans") into display labels.
+function parseAllergens(s: string | null): string[] {
+  if (!s) return [];
+  const seen = new Set<string>();
+  for (const t of s.split(',')) {
+    const v = t.replace(/^[a-z]{2}:/, '').replace(/-/g, ' ').trim();
+    if (v) seen.add(v);
+  }
+  return [...seen].slice(0, 12);
+}
+const DIET_FLAGS: Record<string, string> = {
+  vegan: 'Vegan', vegetarian: 'Vegetarian', 'gluten-free': 'Gluten-free',
+  'no-gluten': 'Gluten-free', organic: 'Organic', 'palm-oil-free': 'Palm-oil-free',
+};
+function parseDiet(s: string | null): string[] {
+  if (!s) return [];
+  const out = new Set<string>();
+  for (const t of s.split(',')) {
+    const v = DIET_FLAGS[t.replace(/^[a-z]{2}:/, '').trim().toLowerCase()];
+    if (v) out.add(v);
+  }
+  return [...out];
 }
 
 app.get('/api/food', async (req, res) => {

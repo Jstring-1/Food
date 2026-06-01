@@ -144,10 +144,16 @@ function renderLabel(d, idx = 0) {
 
   const options = servings.map((s, i) => `<option value="${i}">${esc(s.label)}</option>`).join('');
 
+  // Nutri-Score + NOVA processing badges (OFF only).
+  const badges =
+    (d.grade ? `<span class="nutri nutri-${d.grade}">Nutri-Score ${d.grade.toUpperCase()}</span>` : '') +
+    (d.nova ? `<span class="nova nova-${d.nova}">NOVA ${d.nova} · ${['','unprocessed','processed culinary','processed','ultra-processed'][d.nova] || ''}</span>` : '');
+
   return `
   <div class="nf">
     ${d.brand ? `<p class="brand">${esc(d.brand)}</p>` : ''}
     <p class="name">${esc(d.title)}</p>
+    ${badges ? `<p class="nf-badges">${badges}</p>` : ''}
     <p class="title">Nutrition Facts</p>
     <p class="serving">Amount per <select id="serving-select" class="serving-select">${options}</select></p>
     <div class="bar"></div>
@@ -167,9 +173,31 @@ function renderLabel(d, idx = 0) {
       ${micros}
     </table>
     ${micros ? '' : '<p class="na">Vitamin/mineral detail not available for this source.</p>'}
+    ${macroRing(n)}
     <p class="footnote">* The % Daily Value tells you how much a nutrient in a serving contributes to a daily diet. 2,000 calories a day is used for general nutrition advice.</p>
+    ${d.allergens && d.allergens.length ? `<p class="nf-allergens"><b>Allergens:</b> ${d.allergens.map(esc).join(', ')}</p>` : ''}
+    ${d.diet && d.diet.length ? `<p class="nf-diet">${d.diet.map((x) => `<span class="diet-badge">${esc(x)}</span>`).join('')}</p>` : ''}
     ${d.ingredients ? `<p class="ingredients"><b>Ingredients:</b> ${esc(d.ingredients)}</p>` : ''}
   </div>`;
+}
+
+// Macro calorie breakdown ring (fat 9 kcal/g, carbs & protein 4 kcal/g).
+function macroRing(n) {
+  const fatC = (n.fat || 0) * 9, carbC = (n.carbs || 0) * 4, protC = (n.protein || 0) * 4;
+  const total = fatC + carbC + protC;
+  if (total <= 0) return '';
+  const pct = (x) => Math.round((x / total) * 100);
+  const cDeg = (carbC / total) * 360, fDeg = (fatC / total) * 360;
+  const ring = `conic-gradient(#5b8def 0 ${cDeg}deg, #f2b14c ${cDeg}deg ${cDeg + fDeg}deg, #5fbf77 ${cDeg + fDeg}deg 360deg)`;
+  return `
+    <div class="macros">
+      <div class="ring" style="background:${ring}"><span class="ring-hole"></span></div>
+      <ul class="macro-legend">
+        <li><i style="background:#5b8def"></i>Carbs ${pct(carbC)}%</li>
+        <li><i style="background:#f2b14c"></i>Fat ${pct(fatC)}%</li>
+        <li><i style="background:#5fbf77"></i>Protein ${pct(protC)}%</li>
+      </ul>
+    </div>`;
 }
 
 syncFilterVisibility();

@@ -65,6 +65,8 @@ function transformSql(file: string): string {
       ${per100g('iron')}               AS iron_100g,
       ${per100g('potassium')}          AS potassium_100g,
       ${per100g('vitamin-c')}          AS vitamin_c_100g,
+      array_to_string(allergens_tags, ',') AS allergens,
+      array_to_string(list_concat(coalesce(labels_tags, []), coalesce(ingredients_analysis_tags, [])), ',') AS diet_tags,
       ${INCLUDE_JSON ? 'to_json(nutriments)' : 'NULL'} AS nutriments,
       CASE WHEN last_modified_t IS NOT NULL THEN to_timestamp(last_modified_t) END AS last_modified
     FROM read_parquet('${file.replace(/\\/g, '/')}')
@@ -79,6 +81,7 @@ const COPY_SQL = `COPY off_product (
   energy_kcal_100g, proteins_100g, fat_100g, saturated_fat_100g, carbohydrates_100g,
   sugars_100g, fiber_100g, salt_100g, sodium_100g,
   vitamin_d_100g, calcium_100g, iron_100g, potassium_100g, vitamin_c_100g,
+  allergens, diet_tags,
   nutriments, last_modified
 ) FROM STDIN WITH (FORMAT text)`;
 
@@ -108,6 +111,8 @@ function toLine(r: any): string {
     r.iron_100g,
     r.potassium_100g,
     r.vitamin_c_100g,
+    r.allergens,
+    r.diet_tags,
     r.nutriments,
     r.last_modified,
   );

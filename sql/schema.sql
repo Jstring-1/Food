@@ -102,6 +102,8 @@ CREATE TABLE IF NOT EXISTS off_product (
   iron_100g           DOUBLE PRECISION,
   potassium_100g      DOUBLE PRECISION,
   vitamin_c_100g      DOUBLE PRECISION,
+  allergens           TEXT,                    -- comma-joined allergen tags (e.g. en:milk,en:soybeans)
+  diet_tags           TEXT,                    -- labels + ingredient-analysis tags (vegan, gluten-free, ...)
   nutriments          JSONB,                   -- full nutrient array; null unless OFF_NUTRIMENTS_JSON=1
   last_modified       TIMESTAMPTZ
 );
@@ -111,6 +113,8 @@ ALTER TABLE off_product ADD COLUMN IF NOT EXISTS calcium_100g   DOUBLE PRECISION
 ALTER TABLE off_product ADD COLUMN IF NOT EXISTS iron_100g      DOUBLE PRECISION;
 ALTER TABLE off_product ADD COLUMN IF NOT EXISTS potassium_100g DOUBLE PRECISION;
 ALTER TABLE off_product ADD COLUMN IF NOT EXISTS vitamin_c_100g DOUBLE PRECISION;
+ALTER TABLE off_product ADD COLUMN IF NOT EXISTS allergens      TEXT;
+ALTER TABLE off_product ADD COLUMN IF NOT EXISTS diet_tags      TEXT;
 
 CREATE INDEX IF NOT EXISTS off_name_trgm ON off_product USING gin (product_name gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS off_brands_idx ON off_product USING gin (brands gin_trgm_ops);
