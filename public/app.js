@@ -21,7 +21,7 @@ async function loadStats() {
     const total = (s.usda || 0) + (s.off || 0);
     statsEl.innerHTML =
       `<b>${total.toLocaleString()}</b> foods in the database` +
-      ` &nbsp;·&nbsp; ${s.usda.toLocaleString()} USDA · ${s.off.toLocaleString()} Open Food Facts`;
+      `<span class="breakdown">${s.usda.toLocaleString()} USDA · ${s.off.toLocaleString()} Open Food Facts</span>`;
   } catch { statsEl.textContent = ''; }
 }
 

@@ -10,6 +10,7 @@ header h1 { margin: 0 0 .25rem; font-size: 1.6rem; }
 .meta a { color: #9aa0ff; }
 #stats { font-size: 1rem; color: #b9b9d0; }
 #stats b { color: #e6e6ef; }
+#stats .breakdown { display: block; font-size: .72rem; color: #6e6e85; margin-top: .1rem; }
 footer .meta { font-size: .62rem; line-height: 1.4; color: #6e6e85; }
 
 main {
