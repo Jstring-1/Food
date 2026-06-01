@@ -28,12 +28,16 @@ CREATE TABLE IF NOT EXISTS fdc_nutrient (
   nutrient_nbr  TEXT
 );
 
+-- No composite PK: FDC ships duplicate (fdc_id, nutrient_id) pairs (same
+-- nutrient via different derivations). Index on fdc_id backs the label lookup.
 CREATE TABLE IF NOT EXISTS fdc_food_nutrient (
   fdc_id        INTEGER NOT NULL REFERENCES fdc_food(fdc_id) ON DELETE CASCADE,
   nutrient_id   INTEGER NOT NULL REFERENCES fdc_nutrient(id),
-  amount        DOUBLE PRECISION,            -- amount per 100 g/ml of the food
-  PRIMARY KEY (fdc_id, nutrient_id)
+  amount        DOUBLE PRECISION             -- amount per 100 g/ml of the food
 );
+
+-- Drop the old composite PK on tables created before this change.
+ALTER TABLE fdc_food_nutrient DROP CONSTRAINT IF EXISTS fdc_food_nutrient_pkey;
 
 CREATE TABLE IF NOT EXISTS fdc_branded (
   fdc_id                 INTEGER PRIMARY KEY REFERENCES fdc_food(fdc_id) ON DELETE CASCADE,
@@ -47,6 +51,7 @@ CREATE TABLE IF NOT EXISTS fdc_branded (
   branded_food_category  TEXT
 );
 
+CREATE INDEX IF NOT EXISTS fdc_food_nutrient_fdc_idx ON fdc_food_nutrient (fdc_id);
 CREATE INDEX IF NOT EXISTS fdc_branded_gtin_idx ON fdc_branded (gtin_upc);
 CREATE INDEX IF NOT EXISTS fdc_food_datatype_idx ON fdc_food (data_type);
 CREATE INDEX IF NOT EXISTS fdc_food_desc_trgm ON fdc_food USING gin (description gin_trgm_ops);
