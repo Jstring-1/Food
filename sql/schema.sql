@@ -13,10 +13,13 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE TABLE IF NOT EXISTS fdc_food (
   fdc_id            INTEGER PRIMARY KEY,
   data_type         TEXT NOT NULL,          -- foundation_food | sr_legacy_food | branded_food | survey_fndds_food
-  description       TEXT NOT NULL,
+  description       TEXT,                    -- nullable: some branded_food rows have no description
   food_category     TEXT,                    -- resolved from food_category.csv at ingest
   publication_date  DATE
 );
+
+-- Fix already-created tables (CREATE TABLE IF NOT EXISTS won't alter them).
+ALTER TABLE fdc_food ALTER COLUMN description DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS fdc_nutrient (
   id            INTEGER PRIMARY KEY,         -- nutrient.csv id (NOT the older nutrient_nbr)

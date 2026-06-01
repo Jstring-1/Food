@@ -1,16 +1,31 @@
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import express from 'express';
 import { pool } from './db.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
-// Liveness probe — never touches the DB, so deploys go green even before
-// the schema is migrated or data is loaded.
-app.get('/health', (_req, res) => {
-  res.json({ ok: true });
+app.use(express.static(PUBLIC_DIR));
+
+// Liveness probe — never touches the DB.
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// Row counts for the landing header.
+app.get('/api/stats', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT (SELECT count(*) FROM fdc_food)    AS usda,
+              (SELECT count(*) FROM off_product) AS off`,
+    );
+    res.json({ usda: Number(rows[0].usda), off: Number(rows[0].off) });
+  } catch {
+    res.json({ usda: 0, off: 0, error: 'database not ready' });
+  }
 });
 
-// Search both sources by name. Trigram indexes (pg_trgm) back the ILIKE.
+// Search both sources by name.
 app.get('/api/search', async (req, res) => {
   const q = String(req.query.q ?? '').trim();
   if (q.length < 2) {
@@ -26,87 +41,154 @@ app.get('/api/search', async (req, res) => {
         [like],
       ),
       pool.query(
-        `SELECT code, product_name, brands, nutriscore_grade
-           FROM off_product WHERE product_name ILIKE $1 ORDER BY product_name LIMIT 25`,
+        `SELECT code, product_name, brands
+           FROM off_product
+          WHERE product_name ILIKE $1 AND product_name IS NOT NULL
+          ORDER BY product_name LIMIT 25`,
         [like],
       ),
     ]);
-    res.json({ usda: fdc.rows, openfoodfacts: off.rows });
+    const results = [
+      ...fdc.rows.map((r) => ({
+        source: 'usda',
+        id: String(r.fdc_id),
+        title: r.description,
+        sub: r.food_category || r.data_type?.replace(/_/g, ' '),
+      })),
+      ...off.rows.map((r) => ({
+        source: 'off',
+        id: r.code,
+        title: r.product_name,
+        sub: r.brands || '',
+      })),
+    ];
+    res.json({ results });
   } catch (err) {
     res.status(500).json({ error: 'query failed', detail: String(err) });
   }
 });
 
-// Minimal landing page: live row counts + a search box.
-app.get('/', async (_req, res) => {
-  let counts = '';
-  try {
-    const { rows } = await pool.query(
-      `SELECT
-         (SELECT count(*) FROM fdc_food)    AS usda,
-         (SELECT count(*) FROM off_product) AS off`,
+// FDC nutrient name -> normalized label field. Units already match the label
+// (G / MG / UG=mcg) so amounts pass through unscaled by unit.
+const FDC_NUTRIENTS: Record<string, { names: string[]; unit?: string }> = {
+  energyKcal: { names: ['Energy'], unit: 'KCAL' },
+  fat: { names: ['Total lipid (fat)'] },
+  satFat: { names: ['Fatty acids, total saturated'] },
+  transFat: { names: ['Fatty acids, total trans'] },
+  cholesterol: { names: ['Cholesterol'] },
+  sodium: { names: ['Sodium, Na'] },
+  carbs: { names: ['Carbohydrate, by difference'] },
+  fiber: { names: ['Fiber, total dietary'] },
+  sugars: { names: ['Sugars, total including NLEA', 'Total Sugars', 'Sugars, Total'] },
+  addedSugars: { names: ['Sugars, added', 'Added Sugars'] },
+  protein: { names: ['Protein'] },
+  vitaminD: { names: ['Vitamin D (D2 + D3)'] },
+  calcium: { names: ['Calcium, Ca'] },
+  iron: { names: ['Iron, Fe'] },
+  potassium: { names: ['Potassium, K'] },
+};
+
+async function fdcLabel(id: number) {
+  const food = await pool.query(
+    `SELECT f.fdc_id, f.description, f.data_type, f.food_category,
+            b.brand_owner, b.brand_name, b.serving_size, b.serving_size_unit,
+            b.household_serving, b.ingredients
+       FROM fdc_food f
+       LEFT JOIN fdc_branded b ON b.fdc_id = f.fdc_id
+      WHERE f.fdc_id = $1`,
+    [id],
+  );
+  if (food.rowCount === 0) return null;
+  const f = food.rows[0];
+
+  const nut = await pool.query(
+    `SELECT n.name, n.unit_name, fn.amount
+       FROM fdc_food_nutrient fn JOIN fdc_nutrient n ON n.id = fn.nutrient_id
+      WHERE fn.fdc_id = $1`,
+    [id],
+  );
+
+  const find = (spec: { names: string[]; unit?: string }) => {
+    const row = nut.rows.find(
+      (r) => spec.names.includes(r.name) && (!spec.unit || r.unit_name === spec.unit),
     );
-    counts = `${Number(rows[0].usda).toLocaleString()} USDA foods · ${Number(
-      rows[0].off,
-    ).toLocaleString()} Open Food Facts products`;
-  } catch {
-    counts = 'database not migrated yet — run <code>npm run db:migrate</code>';
+    return row?.amount != null ? Number(row.amount) : null;
+  };
+
+  // Scale to serving when the branded serving is a mass/volume (per-100g basis).
+  let factor = 1;
+  let servingText = 'per 100 g';
+  const unit = (f.serving_size_unit || '').toLowerCase();
+  if (f.serving_size && ['g', 'ml', 'grm', 'mlt'].includes(unit)) {
+    factor = Number(f.serving_size) / 100;
+    servingText = f.household_serving
+      ? `${f.household_serving} (${f.serving_size} ${unit})`
+      : `${f.serving_size} ${unit}`;
   }
 
-  res.type('html').send(`<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Food &amp; Nutrition DB</title>
-  <style>
-    :root { color-scheme: dark; }
-    body { font: 16px/1.5 system-ui, sans-serif; max-width: 720px; margin: 4rem auto;
-           padding: 0 1rem; background: #0e0e14; color: #e6e6ef; }
-    h1 { margin-bottom: .25rem; }
-    .meta { color: #8a8aa0; margin-bottom: 2rem; }
-    input { width: 100%; padding: .7rem 1rem; font-size: 1rem; border-radius: 8px;
-            border: 1px solid #33334a; background: #16161f; color: inherit; }
-    .row { padding: .6rem 0; border-bottom: 1px solid #22222e; }
-    .src { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em;
-           color: #6e6e8a; }
-    .sub { color: #8a8aa0; font-size: .85rem; }
-  </style>
-</head>
-<body>
-  <h1>Food &amp; Nutrition DB</h1>
-  <p class="meta">${counts}</p>
-  <input id="q" type="search" placeholder="Search foods (e.g. cheddar, banana)…" autofocus />
-  <div id="results"></div>
-  <script>
-    const q = document.getElementById('q');
-    const out = document.getElementById('results');
-    let t;
-    q.addEventListener('input', () => {
-      clearTimeout(t);
-      t = setTimeout(run, 250);
-    });
-    async function run() {
-      const v = q.value.trim();
-      if (v.length < 2) { out.innerHTML = ''; return; }
-      const r = await fetch('/api/search?q=' + encodeURIComponent(v));
-      if (!r.ok) { out.innerHTML = '<p class="sub">…</p>'; return; }
-      const d = await r.json();
-      const rows = [];
-      for (const f of d.usda || [])
-        rows.push('<div class="row"><span class="src">usda</span> ' + esc(f.description) +
-          '<div class="sub">' + esc(f.food_category || f.data_type || '') + '</div></div>');
-      for (const p of d.openfoodfacts || [])
-        rows.push('<div class="row"><span class="src">off</span> ' + esc(p.product_name || '(unnamed)') +
-          '<div class="sub">' + esc(p.brands || '') + '</div></div>');
-      out.innerHTML = rows.join('') || '<p class="sub">No matches.</p>';
-    }
-    function esc(s) { const e = document.createElement('div'); e.textContent = s; return e.innerHTML; }
-  </script>
-</body>
-</html>`);
+  const n: Record<string, number | null> = {};
+  for (const [field, spec] of Object.entries(FDC_NUTRIENTS)) {
+    const v = find(spec);
+    n[field] = v == null ? null : +(v * factor).toFixed(2);
+  }
+
+  return {
+    source: 'usda',
+    id: String(f.fdc_id),
+    title: f.description,
+    brand: f.brand_name || f.brand_owner || '',
+    category: f.food_category || f.data_type?.replace(/_/g, ' ') || '',
+    servingText,
+    ingredients: f.ingredients || '',
+    n,
+  };
+}
+
+async function offLabel(code: string) {
+  const r = await pool.query(`SELECT * FROM off_product WHERE code = $1`, [code]);
+  if (r.rowCount === 0) return null;
+  const p = r.rows[0];
+  const num = (v: unknown) => (v == null ? null : Number(v));
+  return {
+    source: 'off',
+    id: p.code,
+    title: p.product_name || '(unnamed product)',
+    brand: p.brands || '',
+    category: p.categories ? String(p.categories).split(',')[0] : '',
+    servingText: p.serving_size ? `${p.serving_size} — values per 100 g` : 'per 100 g',
+    ingredients: p.ingredients_text || '',
+    n: {
+      energyKcal: num(p.energy_kcal_100g),
+      fat: num(p.fat_100g),
+      satFat: num(p.saturated_fat_100g),
+      transFat: null,
+      cholesterol: null,
+      sodium: p.sodium_100g == null ? null : +(Number(p.sodium_100g) * 1000).toFixed(1), // g -> mg
+      carbs: num(p.carbohydrates_100g),
+      fiber: num(p.fiber_100g),
+      sugars: num(p.sugars_100g),
+      addedSugars: null,
+      protein: num(p.proteins_100g),
+      vitaminD: null,
+      calcium: null,
+      iron: null,
+      potassium: null,
+    },
+  };
+}
+
+app.get('/api/food', async (req, res) => {
+  const source = String(req.query.source ?? '');
+  const id = String(req.query.id ?? '');
+  if (!id) return void res.status(400).json({ error: 'id required' });
+  try {
+    const label =
+      source === 'usda' ? await fdcLabel(Number(id)) : source === 'off' ? await offLabel(id) : null;
+    if (!label) return void res.status(404).json({ error: 'not found' });
+    res.json(label);
+  } catch (err) {
+    res.status(500).json({ error: 'lookup failed', detail: String(err) });
+  }
 });
 
-app.listen(PORT, () => {
-  console.log(`food server listening on :${PORT}`);
-});
+app.listen(PORT, () => console.log(`food server listening on :${PORT}`));

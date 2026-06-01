@@ -1,0 +1,68 @@
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body {
+  font: 16px/1.5 system-ui, -apple-system, sans-serif;
+  margin: 0; background: #0e0e14; color: #e6e6ef;
+}
+header, footer { max-width: 980px; margin: 0 auto; padding: 1.5rem 1rem; }
+header h1 { margin: 0 0 .25rem; font-size: 1.6rem; }
+.meta { color: #8a8aa0; font-size: .9rem; margin: 0; }
+.meta a { color: #9aa0ff; }
+
+main {
+  max-width: 980px; margin: 0 auto; padding: 0 1rem 4rem;
+  display: grid; grid-template-columns: 1fr; gap: 2rem;
+}
+@media (min-width: 760px) { main { grid-template-columns: 1fr 340px; align-items: start; } }
+
+input[type="search"] {
+  width: 100%; padding: .8rem 1rem; font-size: 1rem; border-radius: 10px;
+  border: 1px solid #33334a; background: #16161f; color: inherit;
+}
+input[type="search"]:focus { outline: none; border-color: #6e6eff; }
+
+.results { margin-top: 1rem; display: flex; flex-direction: column; }
+.result {
+  text-align: left; width: 100%; background: none; border: none; cursor: pointer;
+  color: inherit; padding: .7rem .6rem; border-bottom: 1px solid #22222e;
+  border-radius: 6px;
+}
+.result:hover, .result:focus { background: #1a1a26; outline: none; }
+.result .title { font-weight: 600; }
+.result .sub { color: #8a8aa0; font-size: .85rem; }
+.badge {
+  font-size: .62rem; text-transform: uppercase; letter-spacing: .06em;
+  padding: .1rem .4rem; border-radius: 4px; margin-right: .5rem; vertical-align: middle;
+}
+.badge.usda { background: #1f3d1f; color: #8fe08f; }
+.badge.off  { background: #1f2d3d; color: #8fc6e0; }
+.empty { color: #8a8aa0; padding: .7rem .6rem; }
+
+/* ── FDA-style Nutrition Facts label ───────────────────────────── */
+.label-panel { position: sticky; top: 1rem; }
+.nf {
+  background: #fff; color: #000; width: 100%; max-width: 320px;
+  border: 1px solid #000; padding: 6px 9px; font-family: Helvetica, Arial, sans-serif;
+}
+.nf * { margin: 0; }
+.nf .brand { font-size: 11px; color: #333; }
+.nf .name { font-size: 14px; font-weight: bold; line-height: 1.2; margin-bottom: 2px; }
+.nf .title { font-size: 30px; font-weight: 800; border-bottom: 1px solid #000; letter-spacing: -.5px; }
+.nf .serving { font-size: 12px; padding: 2px 0; }
+.nf .bar { border-top: 10px solid #000; }
+.nf .cal-row { display: flex; justify-content: space-between; align-items: baseline;
+  border-bottom: 4px solid #000; padding: 2px 0; }
+.nf .cal-row .lbl { font-weight: 800; font-size: 13px; }
+.nf .cal-row .val { font-weight: 800; font-size: 26px; }
+.nf .dv-head { text-align: right; font-size: 11px; font-weight: bold; padding: 2px 0;
+  border-bottom: 1px solid #000; }
+.nf table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.nf td { padding: 1px 0; border-bottom: 1px solid #000; vertical-align: baseline; }
+.nf td.dv { text-align: right; font-weight: bold; }
+.nf .ind { padding-left: 16px; }
+.nf .ind2 { padding-left: 32px; font-style: italic; }
+.nf b { font-weight: 800; }
+.nf .thick td { border-bottom-width: 6px; }
+.nf .footnote { font-size: 10px; line-height: 1.25; padding-top: 4px; color: #000; }
+.nf .ingredients { font-size: 10px; color: #222; padding-top: 6px; }
+.nf .na { font-size: 11px; color: #555; padding-top: 4px; }

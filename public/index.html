@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Food &amp; Nutrition DB</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Food &amp; Nutrition DB</h1>
+    <p id="stats" class="meta">loading…</p>
+  </header>
+
+  <main>
+    <section class="search">
+      <input id="q" type="search" placeholder="Search foods — e.g. cheddar, banana, oat milk…" autofocus />
+      <div id="results" class="results"></div>
+    </section>
+
+    <section id="label-panel" class="label-panel" hidden>
+      <div id="label"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p class="meta">
+      Data: <a href="https://fdc.nal.usda.gov/">USDA FoodData Central</a> (public domain) &amp;
+      <a href="https://world.openfoodfacts.org/">Open Food Facts</a> (ODbL).
+      %DV based on a 2,000 calorie diet.
+    </p>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>
