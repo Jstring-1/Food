@@ -1,13 +1,20 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import express from 'express';
 import { pool } from './db.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
+const SHELL = readFileSync(join(PUBLIC_DIR, 'index.html'), 'utf8');
+const ORIGIN = process.env.SITE_ORIGIN || 'https://foodland.fyi';
 
 app.use(express.static(PUBLIC_DIR));
+
+function escHtml(s: unknown): string {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+}
 
 // Liveness probe — never touches the DB.
 app.get('/health', (_req, res) => res.json({ ok: true }));
@@ -413,6 +420,125 @@ app.get('/api/food', async (req, res) => {
     res.json(label);
   } catch (err) {
     res.status(500).json({ error: 'lookup failed', detail: String(err) });
+  }
+});
+
+// ── Server-rendered food pages (permalinks + SEO) ──────────────────────────
+const MACRO_ROWS: [string, string, string][] = [
+  ['Calories', 'energyKcal', 'kcal'], ['Total Fat', 'fat', 'g'], ['Saturated Fat', 'satFat', 'g'],
+  ['Sodium', 'sodium', 'mg'], ['Total Carbohydrate', 'carbs', 'g'], ['Dietary Fiber', 'fiber', 'g'],
+  ['Total Sugars', 'sugars', 'g'], ['Protein', 'protein', 'g'],
+];
+
+// A real (crawlable) per-100g summary; the client hydrates the full interactive
+// label over it on load.
+function labelSummaryHtml(d: any): string {
+  const rows = MACRO_ROWS.filter(([, k]) => d.n[k] != null)
+    .map(([label, k, u]) => `<tr><td>${label}</td><td class="dv">${k === 'energyKcal' ? Math.round(d.n[k]) : (+d.n[k]).toFixed(1)} ${u}</td></tr>`)
+    .join('');
+  return `<div class="nf">
+    ${d.brand ? `<p class="brand">${escHtml(d.brand)}</p>` : ''}
+    <h1 class="name">${escHtml(d.title)}</h1>
+    <p class="title">Nutrition Facts</p>
+    <p class="serving">Per 100 g</p>
+    <table>${rows}</table>
+    ${d.allergens?.length ? `<p class="nf-allergens"><b>Allergens:</b> ${d.allergens.map(escHtml).join(', ')}</p>` : ''}
+    ${d.ingredients ? `<p class="ingredients"><b>Ingredients:</b> ${escHtml(d.ingredients)}</p>` : ''}
+  </div>`;
+}
+
+function renderFoodPage(d: any): string {
+  const n = d.n;
+  const macro = (k: string, u: string) => (n[k] == null ? '' : `${k === 'energyKcal' ? Math.round(n[k]) : +(+n[k]).toFixed(1)}${u}`);
+  const title = `${d.title}${d.brand ? ` (${d.brand})` : ''} — Nutrition Facts | FoodLand.fyi`;
+  const desc = `${d.title}: ${macro('energyKcal', ' kcal')}, ${macro('protein', 'g')} protein, ${macro('carbs', 'g')} carbs, ${macro('fat', 'g')} fat per 100 g. Full nutrition facts, %DV, and ingredients.`.replace(/\s+,/g, ',');
+  const url = `${ORIGIN}/food/${d.source}/${encodeURIComponent(d.id)}`;
+  const jsonLd = {
+    '@context': 'https://schema.org', '@type': 'Product', name: d.title,
+    ...(d.brand ? { brand: { '@type': 'Brand', name: d.brand } } : {}),
+    description: desc, url,
+    nutrition: {
+      '@type': 'NutritionInformation', servingSize: '100 g',
+      ...(n.energyKcal != null ? { calories: `${Math.round(n.energyKcal)} kcal` } : {}),
+      ...(n.protein != null ? { proteinContent: `${(+n.protein).toFixed(1)} g` } : {}),
+      ...(n.carbs != null ? { carbohydrateContent: `${(+n.carbs).toFixed(1)} g` } : {}),
+      ...(n.fat != null ? { fatContent: `${(+n.fat).toFixed(1)} g` } : {}),
+    },
+  };
+  const head = `
+    <meta name="description" content="${escHtml(desc)}" />
+    <link rel="canonical" href="${escHtml(url)}" />
+    <meta property="og:title" content="${escHtml(title)}" />
+    <meta property="og:description" content="${escHtml(desc)}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="${escHtml(url)}" />
+    <script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script>
+  `;
+  const dataScript = `<script>window.__FOOD__=${JSON.stringify(d).replace(/</g, '\\u003c')};</script>`;
+
+  return SHELL
+    .replace(/<title>[\s\S]*?<\/title>/, `<title>${escHtml(title)}</title>`)
+    .replace('</head>', `${head}</head>`)
+    .replace('id="label-panel" class="label-panel" hidden', 'id="label-panel" class="label-panel"')
+    .replace('<div id="label"></div>', `<div id="label"><div id="label-body">${labelSummaryHtml(d)}</div></div>`)
+    .replace('<script src="/app.js">', `${dataScript}<script src="/app.js">`);
+}
+
+app.get('/food/:source/:id', async (req, res) => {
+  const { source, id } = req.params;
+  let label: any = null;
+  try {
+    label = source === 'usda' ? await fdcLabel(Number(id)) : source === 'off' ? await offLabel(id) : null;
+  } catch { /* fall through to 404 */ }
+  if (!label) return void res.status(404).type('html').send(SHELL);
+  res.type('html').send(renderFoodPage(label));
+});
+
+// ── robots.txt + sitemaps ──────────────────────────────────────────────────
+const SITEMAP_PAGE = 25000;
+
+app.get('/robots.txt', (_req, res) => {
+  res.type('text/plain').send(`User-agent: *\nAllow: /\nSitemap: ${ORIGIN}/sitemap.xml\n`);
+});
+
+app.get('/sitemap.xml', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT (SELECT count(*) FROM fdc_food)    AS usda,
+              (SELECT count(*) FROM off_product) AS off`,
+    );
+    const pages: string[] = [];
+    const add = (src: string, total: number) => {
+      for (let i = 0; i < Math.ceil(Number(total) / SITEMAP_PAGE); i++) pages.push(`${ORIGIN}/sitemaps/${src}/${i}.xml`);
+    };
+    add('usda', rows[0].usda);
+    add('off', rows[0].off);
+    res.type('application/xml').send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+      pages.map((p) => `<sitemap><loc>${p}</loc></sitemap>`).join('\n') +
+      `\n</sitemapindex>`,
+    );
+  } catch {
+    res.status(503).type('text/plain').send('sitemap unavailable');
+  }
+});
+
+app.get('/sitemaps/:source/:page.xml', async (req, res) => {
+  const source = req.params.source;
+  const page = Math.max(0, parseInt(req.params.page, 10) || 0);
+  if (source !== 'usda' && source !== 'off') return void res.status(404).end();
+  try {
+    const rows =
+      source === 'usda'
+        ? (await pool.query(`SELECT fdc_id::text id FROM fdc_food ORDER BY fdc_id LIMIT $1 OFFSET $2`, [SITEMAP_PAGE, page * SITEMAP_PAGE])).rows
+        : (await pool.query(`SELECT code id FROM off_product ORDER BY code LIMIT $1 OFFSET $2`, [SITEMAP_PAGE, page * SITEMAP_PAGE])).rows;
+    res.type('application/xml').send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+      rows.map((r) => `<url><loc>${ORIGIN}/food/${source}/${encodeURIComponent(r.id)}</loc></url>`).join('\n') +
+      `\n</urlset>`,
+    );
+  } catch {
+    res.status(503).end();
   }
 });
 

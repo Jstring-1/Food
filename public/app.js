@@ -64,8 +64,10 @@ async function search() {
   if (!results.length) { resultsEl.innerHTML = '<div class="empty">No matches.</div>'; return; }
   resultsEl.innerHTML = '';
   for (const item of results) {
-    const b = document.createElement('button');
+    // Real link (crawlable, shareable, open-in-new-tab) — intercepted for the SPA.
+    const b = document.createElement('a');
     b.className = 'result';
+    b.href = `/food/${item.source}/${encodeURIComponent(item.id)}`;
     const grade = item.grade && /^[a-e]$/.test(item.grade)
       ? `<span class="nutri nutri-${item.grade}">${item.grade.toUpperCase()}</span>` : '';
     const kcal = item.kcal != null ? `<span class="kcal">${Math.round(item.kcal)} kcal/100g</span>` : '';
@@ -74,7 +76,12 @@ async function search() {
       `<span class="badge ${item.source}">${item.source}</span>` +
       `<span class="title">${esc(item.title)}</span>${grade}` +
       `<div class="sub">${esc(item.sub || '')}${kcal}${vc}</div>`;
-    b.onclick = () => showLabel(item.source, item.id, item.variants);
+    b.onclick = (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; // let new-tab work
+      e.preventDefault();
+      showLabel(item.source, item.id, item.variants);
+      history.pushState({}, '', b.href);
+    };
     resultsEl.appendChild(b);
   }
 }
@@ -202,3 +209,11 @@ function macroRing(n) {
 
 syncFilterVisibility();
 loadStats();
+
+// On a server-rendered /food/:source/:id page, hydrate the interactive label
+// (serving dropdown, macro ring, %DV) over the crawlable summary.
+if (window.__FOOD__) {
+  panelEl.hidden = false;
+  const body = document.getElementById('label-body');
+  if (body) paintLabel(body, window.__FOOD__, 0);
+}
