@@ -13,6 +13,7 @@ import { parse } from 'csv-parse';
 import pgCopy from 'pg-copy-streams';
 import { pool } from '../db.js';
 import { row, write, end } from './util.js';
+import { denormalizeFdc } from '../maintenance/denormalize-fdc.js';
 
 const { from: copyFrom } = pgCopy;
 const FDC_DIR = process.env.FDC_DIR ?? './data/fdc';
@@ -116,6 +117,9 @@ async function main() {
     (r) => (r.fdc_id && r.nutrient_id ? row(r.fdc_id, r.nutrient_id, r.amount) : null),
     'food_nutrient',
   );
+
+  // Populate denormalized macro columns so search avoids the nutrient join.
+  await denormalizeFdc();
 
   await pool.end();
   console.log('FDC ingest complete.');

@@ -15,11 +15,22 @@ CREATE TABLE IF NOT EXISTS fdc_food (
   data_type         TEXT NOT NULL,          -- foundation_food | sr_legacy_food | branded_food | survey_fndds_food
   description       TEXT,                    -- nullable: some branded_food rows have no description
   food_category     TEXT,                    -- resolved from food_category.csv at ingest
-  publication_date  DATE
+  publication_date  DATE,
+  -- Denormalized common macros (per 100 g), populated from fdc_food_nutrient
+  -- after load (npm run denormalize:fdc). Lets search filter/sort without
+  -- joining the 27M-row fdc_food_nutrient table.
+  energy_kcal_100g  DOUBLE PRECISION,
+  protein_100g      DOUBLE PRECISION,
+  sugars_100g       DOUBLE PRECISION,
+  fat_100g          DOUBLE PRECISION
 );
 
 -- Fix already-created tables (CREATE TABLE IF NOT EXISTS won't alter them).
 ALTER TABLE fdc_food ALTER COLUMN description DROP NOT NULL;
+ALTER TABLE fdc_food ADD COLUMN IF NOT EXISTS energy_kcal_100g DOUBLE PRECISION;
+ALTER TABLE fdc_food ADD COLUMN IF NOT EXISTS protein_100g     DOUBLE PRECISION;
+ALTER TABLE fdc_food ADD COLUMN IF NOT EXISTS sugars_100g      DOUBLE PRECISION;
+ALTER TABLE fdc_food ADD COLUMN IF NOT EXISTS fat_100g         DOUBLE PRECISION;
 
 CREATE TABLE IF NOT EXISTS fdc_nutrient (
   id            INTEGER PRIMARY KEY,         -- nutrient.csv id (NOT the older nutrient_nbr)
@@ -52,6 +63,7 @@ CREATE TABLE IF NOT EXISTS fdc_branded (
 );
 
 CREATE INDEX IF NOT EXISTS fdc_food_nutrient_fdc_idx ON fdc_food_nutrient (fdc_id);
+CREATE INDEX IF NOT EXISTS fdc_food_kcal_idx ON fdc_food (energy_kcal_100g);
 CREATE INDEX IF NOT EXISTS fdc_branded_gtin_idx ON fdc_branded (gtin_upc);
 CREATE INDEX IF NOT EXISTS fdc_food_datatype_idx ON fdc_food (data_type);
 CREATE INDEX IF NOT EXISTS fdc_food_desc_trgm ON fdc_food USING gin (description gin_trgm_ops);

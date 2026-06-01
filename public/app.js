@@ -58,7 +58,7 @@ document.querySelectorAll('.filters select, .filters input').forEach((el) => {
 
 async function search() {
   const v = qEl.value.trim();
-  if (!isBarcode(v) && v.length < 2) { resultsEl.innerHTML = ''; return; }
+  if (!isBarcode(v) && v.length < 3) { resultsEl.innerHTML = ''; return; }
   const r = await fetch('/api/search?' + readFilters(v).toString());
   if (!r.ok) { resultsEl.innerHTML = '<div class="empty">…</div>'; return; }
   const { results } = await r.json();
