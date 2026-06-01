@@ -143,6 +143,10 @@ async function main() {
     db.close(() => {});
   }
 
+  // Refresh planner stats so searches use the trigram index right after a reload.
+  console.log('  ANALYZE off_product…');
+  await pool.query('ANALYZE off_product');
+
   await pool.end();
   console.log('OFF ingest complete.');
 }
