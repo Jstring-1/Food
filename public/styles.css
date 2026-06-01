@@ -218,3 +218,10 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
 .info-close { position: absolute; top: .6rem; right: .6rem; background: none; border: 1px solid #33334a;
   color: #e6e6ef; border-radius: 6px; padding: .25rem .55rem; cursor: pointer; }
 .info-close:hover { border-color: #6e6eff; }
+
+/* ── Flagged additives in ingredients ──────────────────────────── */
+.nf .additive-note { font-size: 10px; font-weight: 700; color: #b00020; padding-top: 6px; }
+.additive-warn { cursor: help; border-radius: 2px; padding: 0 1px;
+  text-decoration: underline dotted; text-underline-offset: 2px; }
+.additive-warn.avoid { color: #8a0016; background: #ffdcdc; text-decoration-color: #b00020; }
+.additive-warn.caution { color: #6b4500; background: #ffedc2; text-decoration-color: #b07b00; }

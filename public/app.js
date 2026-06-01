@@ -16,6 +16,33 @@ const UNIT = { fat: 'g', satFat: 'g', transFat: 'g', cholesterol: 'mg', sodium: 
   vitaminD: 'mcg', calcium: 'mg', iron: 'mg', potassium: 'mg', vitaminC: 'mg' };
 
 function esc(s) { const e = document.createElement('div'); e.textContent = s ?? ''; return e.innerHTML; }
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Build one combined matcher for all flagged additives (longest terms first).
+let ADDITIVE_RE = null, ADDITIVE_MAP = null;
+function additiveMatcher() {
+  if (ADDITIVE_RE !== null) return;
+  ADDITIVE_MAP = new Map();
+  const terms = [];
+  for (const a of (window.ADDITIVES || [])) for (const t of a.terms) { terms.push(t); ADDITIVE_MAP.set(t.toLowerCase(), a); }
+  terms.sort((x, y) => y.length - x.length);
+  ADDITIVE_RE = terms.length ? new RegExp('(?<![\\w-])(' + terms.map(escRe).join('|') + ')(?![\\w-])', 'gi') : false;
+}
+
+// Escape ingredient text, then wrap flagged additives with a hover-warning span.
+function highlightAdditives(raw) {
+  additiveMatcher();
+  let count = 0;
+  if (!ADDITIVE_RE) return { html: esc(raw), count };
+  const html = esc(raw).replace(ADDITIVE_RE, (m) => {
+    const a = ADDITIVE_MAP.get(m.toLowerCase());
+    if (!a) return m;
+    count++;
+    const tip = (a.severity === 'avoid' ? 'AVOID — ' : 'Caution — ') + a.note;
+    return `<span class="additive-warn ${a.severity}" title="${esc(tip)}">${m}</span>`;
+  });
+  return { html, count };
+}
 function fmt(v, unit) { return v == null ? null : `${(+v).toLocaleString(undefined, { maximumFractionDigits: 1 })}${unit}`; }
 function dv(field, v) { return v == null || !DV[field] ? '' : Math.round((v / DV[field]) * 100) + '%'; }
 
@@ -265,7 +292,7 @@ function renderLabel(d, idx = 0) {
     <p class="footnote">* The % Daily Value tells you how much a nutrient in a serving contributes to a daily diet. 2,000 calories a day is used for general nutrition advice.</p>
     ${d.allergens && d.allergens.length ? `<p class="nf-allergens"><b>Allergens:</b> ${d.allergens.map(esc).join(', ')}</p>` : ''}
     ${d.diet && d.diet.length ? `<p class="nf-diet">${d.diet.map((x) => `<span class="diet-badge">${esc(x)}</span>`).join('')}</p>` : ''}
-    ${d.ingredients ? `<p class="ingredients"><b>Ingredients:</b> ${esc(d.ingredients)}</p>` : ''}
+    ${ingredientsHtml(d.ingredients)}
   </div>
   ${sugarViz(n.sugars)}
   <button type="button" class="dl-label">⬇ Download label as image</button>`;
@@ -283,6 +310,15 @@ function sugarViz(sugars) {
     <div class="sugar-cubes">${icons}${more}</div>
     <p class="sugar-cap">≈ ${label} · ${(+sugars).toFixed(1)} g sugar <span class="cube-note">(1 cube ≈ 4 g)</span></p>
   </div>`;
+}
+
+// Ingredients line with flagged-additive warnings (hover for details).
+function ingredientsHtml(raw) {
+  if (!raw) return '';
+  const { html, count } = highlightAdditives(raw);
+  const warn = count > 0
+    ? `<p class="additive-note">⚠ ${count} flagged additive${count === 1 ? '' : 's'} — hover for details</p>` : '';
+  return `${warn}<p class="ingredients"><b>Ingredients:</b> ${html}</p>`;
 }
 
 // Macro calorie breakdown ring (fat 9 kcal/g, carbs & protein 4 kcal/g).
