@@ -30,8 +30,9 @@ const INCLUDE_JSON = process.env.OFF_NUTRIMENTS_JSON === '1';
 
 // Pick the best language variant from a STRUCT(lang,text)[] column.
 const pickText = (col: string) =>
-  `coalesce(((list_filter(${col}, x -> x.lang='main'))[1]).text,
-            ((list_filter(${col}, x -> x.lang='en'))[1]).text,
+  // Prefer English when OFF has it, else the product's main language, else first.
+  `coalesce(((list_filter(${col}, x -> x.lang='en'))[1]).text,
+            ((list_filter(${col}, x -> x.lang='main'))[1]).text,
             (${col}[1]).text)`;
 
 // Pull one nutrient's per-100g value out of the nutriments struct array.

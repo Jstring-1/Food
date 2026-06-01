@@ -198,26 +198,26 @@ function paintLabel(body, d, idx) {
   if (dl) dl.onclick = () => downloadLabel(body, d);
 }
 
-// Rasterize the FDA label (the .nf node) to a PNG and download it.
+// Rasterize the live FDA label node to a PNG and download it. Captures the
+// on-screen (laid-out) node — cloning off-screen renders blank.
 async function downloadLabel(body, d) {
   const nf = body.querySelector('.nf');
   if (!nf || !window.htmlToImage) return;
-  const clone = nf.cloneNode(true);
-  clone.style.width = nf.offsetWidth + 'px';
-  // Replace the serving dropdown with plain text so the image reads cleanly.
-  const sel = clone.querySelector('#serving-select');
+  // Temporarily swap the serving dropdown for plain text so the image is clean.
+  const sel = nf.querySelector('#serving-select');
+  let span = null;
   if (sel) {
-    const span = document.createElement('span');
+    span = document.createElement('span');
     span.textContent = sel.options[sel.selectedIndex]?.text ?? '';
     span.style.fontWeight = 'bold';
-    sel.replaceWith(span);
+    sel.style.display = 'none';
+    sel.insertAdjacentElement('afterend', span);
   }
-  clone.style.position = 'fixed';
-  clone.style.left = '-99999px';
-  clone.style.top = '0';
-  document.body.appendChild(clone);
+  // skipFonts avoids html-to-image hanging while it tries to inline external
+  // stylesheets/fonts; the label uses system fonts (Helvetica/Arial) anyway.
+  const opts = { pixelRatio: 2, backgroundColor: '#ffffff', skipFonts: true, style: { margin: '0' } };
   try {
-    const url = await window.htmlToImage.toPng(clone, { pixelRatio: 2, backgroundColor: '#ffffff' });
+    const url = await window.htmlToImage.toPng(nf, opts);
     const a = document.createElement('a');
     a.href = url;
     a.download = (d?.title || 'nutrition-facts').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) + '-nutrition-facts.png';
@@ -225,7 +225,8 @@ async function downloadLabel(body, d) {
   } catch (e) {
     console.error('label download failed', e);
   } finally {
-    clone.remove();
+    if (span) span.remove();
+    if (sel) sel.style.display = '';
   }
 }
 
