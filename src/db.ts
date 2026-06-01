@@ -3,7 +3,10 @@ import { Pool } from 'pg';
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
-  throw new Error('DATABASE_URL is not set. Copy .env.example to .env and fill it in.');
+  // Don't crash the process — let /health stay up and DB-backed routes fail
+  // gracefully. On Railway, set DATABASE_URL in the service Variables (a .env
+  // file is never deployed). Locally, copy .env.example to .env.
+  console.warn('WARNING: DATABASE_URL is not set — database queries will fail until it is configured.');
 }
 
 export const pool = new Pool({
