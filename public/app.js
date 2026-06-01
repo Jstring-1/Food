@@ -18,7 +18,10 @@ function dv(field, v) { return v == null || !DV[field] ? '' : Math.round((v / DV
 async function loadStats() {
   try {
     const s = await (await fetch('/api/stats')).json();
-    statsEl.textContent = `${s.usda.toLocaleString()} USDA foods · ${s.off.toLocaleString()} Open Food Facts products`;
+    const total = (s.usda || 0) + (s.off || 0);
+    statsEl.innerHTML =
+      `<b>${total.toLocaleString()}</b> foods in the database` +
+      ` &nbsp;·&nbsp; ${s.usda.toLocaleString()} USDA · ${s.off.toLocaleString()} Open Food Facts`;
   } catch { statsEl.textContent = ''; }
 }
 
