@@ -233,6 +233,21 @@ function renderLabel(d, idx = 0) {
     ${d.allergens && d.allergens.length ? `<p class="nf-allergens"><b>Allergens:</b> ${d.allergens.map(esc).join(', ')}</p>` : ''}
     ${d.diet && d.diet.length ? `<p class="nf-diet">${d.diet.map((x) => `<span class="diet-badge">${esc(x)}</span>`).join('')}</p>` : ''}
     ${d.ingredients ? `<p class="ingredients"><b>Ingredients:</b> ${esc(d.ingredients)}</p>` : ''}
+  </div>
+  ${sugarViz(n.sugars)}`;
+}
+
+// Visualize sugar as ~4 g sugar cubes for the current serving.
+function sugarViz(sugars) {
+  if (sugars == null || sugars <= 0) return '';
+  const count = Math.round(sugars / 4);
+  const shown = Math.min(Math.max(count, 1), 40);
+  const icons = Array.from({ length: shown }, () => '<span class="cube"></span>').join('');
+  const more = count > shown ? `<span class="cube-more">+${count - shown}</span>` : '';
+  const label = count >= 1 ? `${count} sugar cube${count === 1 ? '' : 's'}` : 'under 1 sugar cube';
+  return `<div class="sugar-viz">
+    <div class="sugar-cubes">${icons}${more}</div>
+    <p class="sugar-cap">≈ ${label} · ${(+sugars).toFixed(1)} g sugar <span class="cube-note">(1 cube ≈ 4 g)</span></p>
   </div>`;
 }
 
