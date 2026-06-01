@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.log
+
+# data dumps — never commit these (gigabytes; re-download instead)
+data/
+*.csv
+*.jsonl
+*.jsonl.gz
+*.zip

@@ -1,0 +1,27 @@
+{
+  "name": "food",
+  "version": "0.1.0",
+  "description": "Food & nutrition database — USDA FoodData Central + Open Food Facts ingestion",
+  "type": "module",
+  "scripts": {
+    "db:migrate": "tsx src/migrate.ts",
+    "ingest:fdc": "tsx src/ingest/fdc.ts",
+    "ingest:off": "tsx src/ingest/off.ts",
+    "counts": "tsx src/counts.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "csv-parse": "^5.5.6",
+    "dotenv": "^16.4.5",
+    "pg": "^8.20.0",
+    "pg-copy-streams": "^6.0.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.18.0",
+    "@types/pg-copy-streams": "^1.2.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}
