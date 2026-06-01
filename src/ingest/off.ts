@@ -63,7 +63,9 @@ function transformSql(file: string): string {
       ${INCLUDE_JSON ? 'to_json(nutriments)' : 'NULL'} AS nutriments,
       CASE WHEN last_modified_t IS NOT NULL THEN to_timestamp(last_modified_t) END AS last_modified
     FROM read_parquet('${file.replace(/\\/g, '/')}')
-    WHERE code IS NOT NULL`;
+    WHERE code IS NOT NULL AND trim(code) <> ''
+    -- code is the PK; keep one row per barcode (most recently modified)
+    QUALIFY row_number() OVER (PARTITION BY code ORDER BY last_modified_t DESC NULLS LAST) = 1`;
 }
 
 const COPY_SQL = `COPY off_product (
