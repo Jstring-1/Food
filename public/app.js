@@ -3,6 +3,10 @@ const resultsEl = document.getElementById('results');
 const panelEl = document.getElementById('label-panel');
 const labelEl = document.getElementById('label');
 const statsEl = document.getElementById('stats');
+const compareBar = document.getElementById('compare-bar');
+const compareModal = document.getElementById('compare-modal');
+const compareLabels = document.getElementById('compare-labels');
+const compareList = []; // {source, id, title}
 
 // FDA Daily Values (2,000 kcal) and display units per normalized field.
 const DV = { fat: 78, satFat: 20, cholesterol: 300, sodium: 2300, carbs: 275,
@@ -82,9 +86,53 @@ async function search() {
       showLabel(item.source, item.id, item.variants);
       history.pushState({}, '', b.href);
     };
+    const cmp = document.createElement('button');
+    cmp.className = 'cmp-btn';
+    cmp.title = 'Add to comparison';
+    cmp.textContent = inCompare(item) ? '✓' : '+';
+    cmp.onclick = (e) => { e.preventDefault(); e.stopPropagation(); toggleCompare(item); cmp.textContent = inCompare(item) ? '✓' : '+'; };
+    b.appendChild(cmp);
     resultsEl.appendChild(b);
   }
 }
+
+const cmpKey = (it) => `${it.source}:${it.id}`;
+const inCompare = (it) => compareList.some((x) => cmpKey(x) === cmpKey(it));
+
+function toggleCompare(item) {
+  const i = compareList.findIndex((x) => cmpKey(x) === cmpKey(item));
+  if (i >= 0) compareList.splice(i, 1);
+  else if (compareList.length < 4) compareList.push({ source: item.source, id: item.id, title: item.title });
+  renderCompareBar();
+}
+
+function renderCompareBar() {
+  if (!compareList.length) { compareBar.hidden = true; return; }
+  compareBar.hidden = false;
+  compareBar.innerHTML =
+    compareList.map((x, i) => `<span class="cmp-chip">${esc(x.title.slice(0, 28))}<button data-i="${i}" class="cmp-x">✕</button></span>`).join('') +
+    `<button id="cmp-go" class="cmp-go">Compare ${compareList.length}</button>` +
+    `<button id="cmp-clear" class="cmp-clear">Clear</button>`;
+  compareBar.querySelectorAll('.cmp-x').forEach((b) => (b.onclick = () => { compareList.splice(Number(b.dataset.i), 1); renderCompareBar(); }));
+  document.getElementById('cmp-go').onclick = openCompare;
+  document.getElementById('cmp-clear').onclick = () => { compareList.length = 0; renderCompareBar(); };
+}
+
+async function openCompare() {
+  compareModal.hidden = false;
+  compareLabels.innerHTML = '<p class="meta" style="padding:1rem">Loading…</p>';
+  const labels = await Promise.all(compareList.map(async (x) => {
+    const r = await fetch(`/api/food?source=${x.source}&id=${encodeURIComponent(x.id)}`);
+    return r.ok ? r.json() : null;
+  }));
+  // Render every label at its 100 g serving for a fair comparison.
+  compareLabels.innerHTML = labels.filter(Boolean).map((d) => {
+    const idx = Math.max(0, (d.servings || []).findIndex((s) => s.grams === 100));
+    return `<div class="cmp-col">${renderLabel(d, idx)}</div>`;
+  }).join('');
+}
+
+document.getElementById('compare-close').onclick = () => { compareModal.hidden = true; };
 
 async function showLabel(source, id, variants) {
   panelEl.hidden = false;
