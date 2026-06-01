@@ -50,24 +50,35 @@ CREATE INDEX IF NOT EXISTS fdc_food_desc_trgm ON fdc_food USING gin (description
 
 -- ──────────────────────────────────────────────────────────────────────────
 -- Open Food Facts  (ODbL — attribution + share-alike on redistribution)
---   Dumps: https://world.openfoodfacts.org/data  (openfoodfacts-products.jsonl.gz)
+--   Dumps: https://world.openfoodfacts.org/data  (Parquet export: food.parquet)
+-- Common macros are flattened into columns at ingest (all per 100 g/ml).
+-- The full per-nutrient blob (nutriments) is opt-in — set OFF_NUTRIMENTS_JSON=1
+-- before ingest. It is large (~8 GB across the full dump); off by default.
 -- ──────────────────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS off_product (
-  code              TEXT PRIMARY KEY,        -- barcode (EAN/UPC)
-  product_name      TEXT,
-  brands            TEXT,
-  categories        TEXT,
-  quantity          TEXT,
-  serving_size      TEXT,
-  ingredients_text  TEXT,
-  nutriscore_grade  TEXT,                     -- a..e
-  nova_group        SMALLINT,                 -- 1..4 (processing level)
-  countries         TEXT,
-  nutriments        JSONB,                    -- full per-100g/serving nutrient object
-  last_modified     TIMESTAMPTZ
+  code                TEXT PRIMARY KEY,        -- barcode (EAN/UPC)
+  product_name        TEXT,
+  brands              TEXT,
+  categories          TEXT,
+  quantity            TEXT,
+  serving_size        TEXT,
+  ingredients_text    TEXT,
+  nutriscore_grade    TEXT,                    -- a..e | unknown | not-applicable
+  nova_group          SMALLINT,                -- 1..4 (processing level)
+  countries           TEXT,                    -- comma-joined country tags
+  energy_kcal_100g    DOUBLE PRECISION,
+  proteins_100g       DOUBLE PRECISION,
+  fat_100g            DOUBLE PRECISION,
+  saturated_fat_100g  DOUBLE PRECISION,
+  carbohydrates_100g  DOUBLE PRECISION,
+  sugars_100g         DOUBLE PRECISION,
+  fiber_100g          DOUBLE PRECISION,
+  salt_100g           DOUBLE PRECISION,
+  sodium_100g         DOUBLE PRECISION,
+  nutriments          JSONB,                   -- full nutrient array; null unless OFF_NUTRIMENTS_JSON=1
+  last_modified       TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS off_name_trgm ON off_product USING gin (product_name gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS off_nutriments_idx ON off_product USING gin (nutriments);
 CREATE INDEX IF NOT EXISTS off_brands_idx ON off_product USING gin (brands gin_trgm_ops);

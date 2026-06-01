@@ -1,90 +1,128 @@
-// Ingest the Open Food Facts JSONL dump into Postgres.
+// Ingest the Open Food Facts Parquet export into Postgres.
 //
-//   1. Download: https://world.openfoodfacts.org/data
-//      -> "openfoodfacts-products.jsonl.gz"  (do NOT gunzip; we stream it)
-//   2. Point OFF_FILE at it (default ./data/openfoodfacts-products.jsonl.gz)
+//   1. Download "food.parquet" from https://world.openfoodfacts.org/data
+//   2. Point OFF_FILE at it (default ./data/food.parquet)
 //   3. npm run db:migrate   (once)
 //   4. npm run ingest:off
 //
-// Full refresh: off_product is truncated and reloaded. The dump is large
-// (tens of GB uncompressed) — this streams line by line, never loading it all.
+// DuckDB reads the Parquet and flattens its nested columns (product_name and
+// ingredients_text are arrays of {lang,text}; nutriments is an array of
+// nutrient structs). We stream the transformed rows and load them via Postgres
+// COPY. Full refresh: off_product is truncated and reloaded.
+//
+// The full nutriments JSON blob is large (~8 GB across the dump). It is only
+// stored when OFF_NUTRIMENTS_JSON=1; otherwise the column is left null and the
+// flattened *_100g columns carry the common macros.
 import 'dotenv/config';
-import { createReadStream, existsSync } from 'node:fs';
-import { createGunzip } from 'node:zlib';
-import { createInterface } from 'node:readline';
+import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import pgCopy from 'pg-copy-streams';
 import { pool } from '../db.js';
 import { row, write, end } from './util.js';
 
-const { from: copyFrom } = pgCopy;
-const OFF_FILE = process.env.OFF_FILE ?? './data/openfoodfacts-products.jsonl.gz';
+const require = createRequire(import.meta.url);
+// duckdb ships CommonJS; load it without fighting ESM/type interop.
+const duckdb = require('duckdb') as any;
 
-function toInt(v: unknown): number | null {
-  const n = Number(v);
-  return Number.isFinite(n) ? Math.trunc(n) : null;
+const { from: copyFrom } = pgCopy;
+const OFF_FILE = process.env.OFF_FILE ?? './data/food.parquet';
+const INCLUDE_JSON = process.env.OFF_NUTRIMENTS_JSON === '1';
+
+// Pick the best language variant from a STRUCT(lang,text)[] column.
+const pickText = (col: string) =>
+  `coalesce(((list_filter(${col}, x -> x.lang='main'))[1]).text,
+            ((list_filter(${col}, x -> x.lang='en'))[1]).text,
+            (${col}[1]).text)`;
+
+// Pull one nutrient's per-100g value out of the nutriments struct array.
+const per100g = (name: string) =>
+  `((list_filter(nutriments, x -> x.name='${name}'))[1])."100g"`;
+
+function transformSql(file: string): string {
+  return `
+    SELECT
+      code,
+      ${pickText('product_name')}      AS product_name,
+      brands,
+      categories,
+      quantity,
+      serving_size,
+      ${pickText('ingredients_text')}  AS ingredients_text,
+      nutriscore_grade,
+      nova_group,
+      array_to_string(countries_tags, ',') AS countries,
+      ${per100g('energy-kcal')}        AS energy_kcal_100g,
+      ${per100g('proteins')}           AS proteins_100g,
+      ${per100g('fat')}                AS fat_100g,
+      ${per100g('saturated-fat')}      AS saturated_fat_100g,
+      ${per100g('carbohydrates')}      AS carbohydrates_100g,
+      ${per100g('sugars')}             AS sugars_100g,
+      ${per100g('fiber')}              AS fiber_100g,
+      ${per100g('salt')}               AS salt_100g,
+      ${per100g('sodium')}             AS sodium_100g,
+      ${INCLUDE_JSON ? 'to_json(nutriments)' : 'NULL'} AS nutriments,
+      CASE WHEN last_modified_t IS NOT NULL THEN to_timestamp(last_modified_t) END AS last_modified
+    FROM read_parquet('${file.replace(/\\/g, '/')}')
+    WHERE code IS NOT NULL`;
+}
+
+const COPY_SQL = `COPY off_product (
+  code, product_name, brands, categories, quantity, serving_size, ingredients_text,
+  nutriscore_grade, nova_group, countries,
+  energy_kcal_100g, proteins_100g, fat_100g, saturated_fat_100g, carbohydrates_100g,
+  sugars_100g, fiber_100g, salt_100g, sodium_100g,
+  nutriments, last_modified
+) FROM STDIN WITH (FORMAT text)`;
+
+function toLine(r: any): string {
+  return row(
+    r.code,
+    r.product_name,
+    r.brands,
+    r.categories,
+    r.quantity,
+    r.serving_size,
+    r.ingredients_text,
+    r.nutriscore_grade,
+    r.nova_group,
+    r.countries,
+    r.energy_kcal_100g,
+    r.proteins_100g,
+    r.fat_100g,
+    r.saturated_fat_100g,
+    r.carbohydrates_100g,
+    r.sugars_100g,
+    r.fiber_100g,
+    r.salt_100g,
+    r.sodium_100g,
+    r.nutriments,
+    r.last_modified,
+  );
 }
 
 async function main() {
-  if (!existsSync(OFF_FILE)) throw new Error(`Missing OFF dump at ${OFF_FILE}`);
-  console.log(`Ingesting Open Food Facts dump from ${OFF_FILE}`);
+  if (!existsSync(OFF_FILE)) throw new Error(`Missing OFF Parquet at ${OFF_FILE}`);
+  console.log(`Ingesting Open Food Facts from ${OFF_FILE}`);
+  console.log(`  full nutriments JSON: ${INCLUDE_JSON ? 'ON' : 'off (set OFF_NUTRIMENTS_JSON=1 to include)'}`);
 
   await pool.query('TRUNCATE off_product');
 
+  const db = new duckdb.Database(':memory:');
+  const con = db.connect();
   const client = await pool.connect();
   try {
-    const dest = client.query(
-      copyFrom(
-        'COPY off_product (code, product_name, brands, categories, quantity, serving_size, ingredients_text, nutriscore_grade, nova_group, countries, nutriments, last_modified) FROM STDIN WITH (FORMAT text)',
-      ),
-    );
-
-    const rl = createInterface({
-      input: createReadStream(OFF_FILE).pipe(createGunzip()),
-      crlfDelay: Infinity,
-    });
-
+    const dest = client.query(copyFrom(COPY_SQL));
+    const stream = con.stream(transformSql(OFF_FILE));
     let n = 0;
-    let skipped = 0;
-    for await (const line of rl) {
-      if (!line) continue;
-      let p: any;
-      try {
-        p = JSON.parse(line);
-      } catch {
-        skipped++;
-        continue;
-      }
-      if (!p.code) {
-        skipped++;
-        continue;
-      }
-      const lastModified =
-        p.last_modified_t != null ? new Date(Number(p.last_modified_t) * 1000).toISOString() : null;
-
-      await write(
-        dest,
-        row(
-          p.code,
-          p.product_name,
-          p.brands,
-          p.categories,
-          p.quantity,
-          p.serving_size,
-          p.ingredients_text,
-          p.nutriscore_grade,
-          toInt(p.nova_group),
-          p.countries,
-          JSON.stringify(p.nutriments ?? {}),
-          lastModified,
-        ),
-      );
+    for await (const r of stream as AsyncIterable<any>) {
+      await write(dest, toLine(r));
       if (++n % 100_000 === 0) console.log(`  products: ${n.toLocaleString()}`);
     }
-
     await end(dest);
-    console.log(`  products: ${n.toLocaleString()} (done, ${skipped.toLocaleString()} skipped)`);
+    console.log(`  products: ${n.toLocaleString()} (done)`);
   } finally {
     client.release();
+    db.close(() => {});
   }
 
   await pool.end();

@@ -6,6 +6,7 @@ import type { Writable } from 'node:stream';
 // Empty/undefined/null all map to NULL (\N).
 export function esc(v: unknown): string {
   if (v === null || v === undefined) return '\\N';
+  if (v instanceof Date) return v.toISOString();
   const s = typeof v === 'string' ? v : String(v);
   if (s === '') return '\\N';
   return s

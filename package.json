@@ -19,6 +19,7 @@
   "dependencies": {
     "csv-parse": "^5.5.6",
     "dotenv": "^16.4.5",
+    "duckdb": "^1.4.4",
     "express": "^4.21.2",
     "pg": "^8.20.0",
     "pg-copy-streams": "^6.0.6"
