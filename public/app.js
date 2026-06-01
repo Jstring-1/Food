@@ -167,6 +167,39 @@ function paintLabel(body, d, idx) {
   body.innerHTML = renderLabel(d, idx);
   const sel = body.querySelector('#serving-select');
   if (sel) { sel.selectedIndex = idx; sel.onchange = () => paintLabel(body, d, sel.selectedIndex); }
+  const dl = body.querySelector('.dl-label');
+  if (dl) dl.onclick = () => downloadLabel(body, d);
+}
+
+// Rasterize the FDA label (the .nf node) to a PNG and download it.
+async function downloadLabel(body, d) {
+  const nf = body.querySelector('.nf');
+  if (!nf || !window.htmlToImage) return;
+  const clone = nf.cloneNode(true);
+  clone.style.width = nf.offsetWidth + 'px';
+  // Replace the serving dropdown with plain text so the image reads cleanly.
+  const sel = clone.querySelector('#serving-select');
+  if (sel) {
+    const span = document.createElement('span');
+    span.textContent = sel.options[sel.selectedIndex]?.text ?? '';
+    span.style.fontWeight = 'bold';
+    sel.replaceWith(span);
+  }
+  clone.style.position = 'fixed';
+  clone.style.left = '-99999px';
+  clone.style.top = '0';
+  document.body.appendChild(clone);
+  try {
+    const url = await window.htmlToImage.toPng(clone, { pixelRatio: 2, backgroundColor: '#ffffff' });
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (d?.title || 'nutrition-facts').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) + '-nutrition-facts.png';
+    a.click();
+  } catch (e) {
+    console.error('label download failed', e);
+  } finally {
+    clone.remove();
+  }
 }
 
 // One label row: label text (+amount) and a %DV cell.
@@ -234,7 +267,8 @@ function renderLabel(d, idx = 0) {
     ${d.diet && d.diet.length ? `<p class="nf-diet">${d.diet.map((x) => `<span class="diet-badge">${esc(x)}</span>`).join('')}</p>` : ''}
     ${d.ingredients ? `<p class="ingredients"><b>Ingredients:</b> ${esc(d.ingredients)}</p>` : ''}
   </div>
-  ${sugarViz(n.sugars)}`;
+  ${sugarViz(n.sugars)}
+  <button type="button" class="dl-label">⬇ Download label as image</button>`;
 }
 
 // Visualize sugar as ~4 g sugar cubes for the current serving.
