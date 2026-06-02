@@ -217,7 +217,13 @@ async function downloadLabel(body, d) {
   // stylesheets/fonts; the label uses system fonts (Helvetica/Arial) anyway.
   const opts = { pixelRatio: 2, backgroundColor: '#ffffff', skipFonts: true, style: { margin: '0' } };
   try {
-    const url = await window.htmlToImage.toPng(nf, opts);
+    // html-to-image's first pass(es) can come out blank in Chrome — render a
+    // few times and keep the last, biggest result.
+    let url = '';
+    for (let i = 0; i < 3; i++) {
+      const u = await window.htmlToImage.toPng(nf, opts);
+      if (u.length >= url.length) url = u;
+    }
     const a = document.createElement('a');
     a.href = url;
     a.download = (d?.title || 'nutrition-facts').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) + '-nutrition-facts.png';
