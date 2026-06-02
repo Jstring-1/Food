@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import express from 'express';
 import { pool } from './db.js';
+import { resolveLogo, brandKey } from './logo.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -59,9 +60,8 @@ app.get('/api/stats', async (_req, res) => {
   }
 });
 
-// Brand logo lookup via Brandfetch search (cached per brand in the DB).
+// Brand logo lookup (resolved once per brand, then cached in the DB).
 const BF_TOKEN = process.env.BRANDFETCH_API_TOKEN;
-const brandKey = (b: string) => b.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 app.get('/api/logo', async (req, res) => {
   const brand = String(req.query.brand ?? '').trim();
@@ -71,16 +71,7 @@ app.get('/api/logo', async (req, res) => {
     const cached = await pool.query('SELECT logo_url FROM brand_logos WHERE brand_key = $1', [key]);
     if (cached.rowCount) return void res.json({ url: cached.rows[0].logo_url });
 
-    let url: string | null = null;
-    try {
-      const r = await fetch(`https://api.brandfetch.io/v2/search/${encodeURIComponent(brand)}`,
-        { headers: BF_TOKEN ? { Authorization: `Bearer ${BF_TOKEN}` } : {} });
-      if (r.ok) {
-        const arr = await r.json();
-        url = (Array.isArray(arr) ? arr.find((x: any) => x.icon) : null)?.icon ?? null;
-      }
-    } catch { /* network/API issue → cache null, fall back to avatar */ }
-
+    const url = await resolveLogo(brand, BF_TOKEN);
     await pool.query(
       `INSERT INTO brand_logos (brand_key, logo_url) VALUES ($1, $2)
        ON CONFLICT (brand_key) DO UPDATE SET logo_url = EXCLUDED.logo_url, fetched_at = now()`,

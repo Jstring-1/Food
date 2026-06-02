@@ -8,12 +8,12 @@
 //   npm run warm:logos            # default top 1500 brands
 //   LOGO_WARM_LIMIT=5000 npm run warm:logos
 import { pool } from '../db.js';
+import { resolveLogo, brandKey } from '../logo.js';
 
 const BF_TOKEN = process.env.BRANDFETCH_API_TOKEN;
 const LIMIT = Number(process.env.LOGO_WARM_LIMIT ?? 1500);
 const DELAY_MS = Number(process.env.LOGO_WARM_DELAY_MS ?? 300);
 
-const brandKey = (b: string) => b.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function topBrands(): Promise<string[]> {
@@ -35,20 +35,8 @@ async function topBrands(): Promise<string[]> {
   return rows.map((r) => String(r.brand).trim()).filter(Boolean);
 }
 
-async function fetchLogo(brand: string): Promise<string | null> {
-  try {
-    const r = await fetch(`https://api.brandfetch.io/v2/search/${encodeURIComponent(brand)}`,
-      { headers: BF_TOKEN ? { Authorization: `Bearer ${BF_TOKEN}` } : {} });
-    if (!r.ok) return null;
-    const arr = await r.json();
-    return (Array.isArray(arr) ? arr.find((x: any) => x.icon) : null)?.icon ?? null;
-  } catch {
-    return null;
-  }
-}
-
 async function main() {
-  if (!BF_TOKEN) console.warn('No BRANDFETCH_API_TOKEN set — search may be rate-limited harder.');
+  if (!BF_TOKEN) console.warn('No BRANDFETCH_API_TOKEN set — real logos need it; run this on Railway.');
 
   const cached = new Set<string>(
     (await pool.query('SELECT brand_key FROM brand_logos')).rows.map((r) => r.brand_key));
@@ -67,7 +55,7 @@ async function main() {
   let hits = 0;
   for (let i = 0; i < todo.length; i++) {
     const { brand, key } = todo[i];
-    const url = await fetchLogo(brand);
+    const url = await resolveLogo(brand, BF_TOKEN);
     await pool.query(
       `INSERT INTO brand_logos (brand_key, logo_url) VALUES ($1, $2)
        ON CONFLICT (brand_key) DO UPDATE SET logo_url = EXCLUDED.logo_url, fetched_at = now()`,
