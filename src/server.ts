@@ -138,7 +138,7 @@ app.get('/api/search', async (req, res) => {
           length(f.description) ASC, f.description ASC`;
       }
       const sql = `
-        SELECT f.fdc_id, f.description, f.data_type, f.food_category,
+        SELECT f.fdc_id, f.description, f.data_type, f.food_category, b.branded_food_category,
                (f.data_type <> 'branded_food') AS whole,
                f.energy_kcal_100g kcal, f.protein_100g protein, f.sugars_100g sugars, f.fat_100g fat,
                coalesce(b.brand_name, b.brand_owner) AS brand,
@@ -164,11 +164,17 @@ app.get('/api/search', async (req, res) => {
         orderBy = `(product_name ILIKE $${p.length}) DESC, length(product_name) ASC, product_name ASC`;
       }
       const sql = `
-        SELECT code, product_name, brands, nutriscore_grade,
+        SELECT code, product_name, brands, categories, nutriscore_grade,
                energy_kcal_100g kcal, proteins_100g protein, sugars_100g sugars, fat_100g fat
           FROM off_product WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT 40`;
       tasks.push(pool.query(sql, p).then((r) => {
-        offRows.push(...r.rows.map((x) => ({ source: 'off', id: x.code, title: x.product_name, brand: x.brands || '', sub: x.brands || '', grade: x.nutriscore_grade, kcal: x.kcal, protein: x.protein, sugars: x.sugars, fat: x.fat, dataType: 'off', variantCount: 1 })));
+        offRows.push(...r.rows.map((x) => ({
+          source: 'off', id: x.code, title: x.product_name,
+          brand: firstBrand(x.brands), category: lastCategory(x.categories),
+          sub: subOf(firstBrand(x.brands), lastCategory(x.categories)),
+          grade: x.nutriscore_grade, kcal: x.kcal, protein: x.protein, sugars: x.sugars, fat: x.fat,
+          dataType: 'off', variantCount: 1,
+        })));
       }));
     }
 
@@ -230,6 +236,20 @@ function servingText(r: any): string {
 // Normalization is conservative — lowercase, punctuation/space-insensitive —
 // so it collapses cosmetic differences without merging distinct products.
 // Each group exposes its members as variants (for the serving dropdown).
+// Consistent "Brand · Category" subtitle for any result (omits blank parts).
+function subOf(brand: string | null, category: string | null): string {
+  return [brand, category].map((s) => (s || '').trim()).filter(Boolean).join(' · ');
+}
+// OFF `categories` is a comma list, broad→specific; take the most specific
+// and de-slug it ("milk-chocolate-bar" -> "milk chocolate bar").
+function lastCategory(c: string | null): string {
+  if (!c) return '';
+  const parts = String(c).split(',').map((s) => s.replace(/^[a-z]{2}:/, '').trim()).filter(Boolean);
+  return parts.length ? parts[parts.length - 1].replace(/-/g, ' ') : '';
+}
+// First brand only (OFF brands are often comma-duplicated, e.g. "Billa,Billa Premium").
+const firstBrand = (b: string | null) => (b ? String(b).split(',')[0].trim() : '');
+
 function groupUsda(rows: any[]): any[] {
   const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const map = new Map<string, any>();
@@ -237,9 +257,10 @@ function groupUsda(rows: any[]): any[] {
     const key = norm(r.brand) + '|' + norm(r.description);
     let g = map.get(key);
     if (!g) {
+      const category = r.food_category || r.branded_food_category || '';
       g = {
         source: 'usda', id: String(r.fdc_id), title: r.description, brand: r.brand || '',
-        sub: r.food_category || r.data_type?.replace(/_/g, ' '), dataType: r.data_type,
+        category, sub: subOf(r.brand, category), dataType: r.data_type,
         kcal: r.kcal, protein: r.protein, sugars: r.sugars, fat: r.fat, variants: [] as any[],
       };
       map.set(key, g);
