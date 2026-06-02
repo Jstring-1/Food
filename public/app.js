@@ -157,12 +157,16 @@ async function openCompare() {
     const r = await fetch(`/api/food?source=${x.source}&id=${encodeURIComponent(x.id)}`);
     return r.ok ? r.json() : null;
   }));
-  // Render every label at its 100 g serving for a fair comparison.
-  compareLabels.innerHTML = labels.filter(Boolean).map((d) => {
+  // Render every label defaulting to its 100 g serving for a fair comparison.
+  // Reuse paintLabel so each column's serving dropdown re-scales on change.
+  compareLabels.innerHTML = '';
+  for (const d of labels.filter(Boolean)) {
+    const col = document.createElement('div');
+    col.className = 'cmp-col';
     const idx = Math.max(0, (d.servings || []).findIndex((s) => s.grams === 100));
-    return `<div class="cmp-col">${renderLabel(d, idx)}</div>`;
-  }).join('');
-  loadLogos(compareLabels);
+    paintLabel(col, d, idx);
+    compareLabels.appendChild(col);
+  }
 }
 
 document.getElementById('compare-close').onclick = () => { compareModal.hidden = true; };
