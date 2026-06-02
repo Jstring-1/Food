@@ -10,7 +10,17 @@ const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'public')
 const SHELL = readFileSync(join(PUBLIC_DIR, 'index.html'), 'utf8');
 const ORIGIN = process.env.SITE_ORIGIN || 'https://foodland.fyi';
 
-app.use(express.static(PUBLIC_DIR));
+// Cache-bust client assets per deploy so browsers never run a stale app.js.
+const ASSET_V = Date.now().toString(36);
+const stamp = (html: string) =>
+  html.replace(/(\/(?:app\.js|styles\.css|additives\.js|vendor\/html2canvas\.min\.js))(?=["'])/g, `$1?v=${ASSET_V}`);
+
+app.use(express.static(PUBLIC_DIR, {
+  index: false,
+  setHeaders: (res, p) => { if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache'); },
+}));
+
+app.get('/', (_req, res) => res.type('html').set('Cache-Control', 'no-cache').send(stamp(SHELL)));
 
 function escHtml(s: unknown): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
@@ -173,7 +183,15 @@ app.get('/api/search', async (req, res) => {
     else if (sort === 'name') out.sort((a, b) => a.title.localeCompare(b.title));
     else out.sort((a, b) => scoreItem(a, ql) - scoreItem(b, ql)); // relevance
 
-    res.json({ results: dedupeByTitleBrand(out).slice(0, 40) });
+    const results = dedupeByTitleBrand(out).slice(0, 40);
+    // Attach a GI indicator to whole-food results (cached lookup).
+    for (const it of results) {
+      if (it.source === 'usda' && it.dataType && it.dataType !== 'branded_food') {
+        const g = await matchGi(it.title);
+        if (g) { it.gi = g.gi; it.giCategory = g.category; }
+      }
+    }
+    res.json({ results });
   } catch (err) {
     res.status(500).json({ error: 'query failed', detail: String(err) });
   }
@@ -530,8 +548,8 @@ app.get('/food/:source/:id', async (req, res) => {
   try {
     label = source === 'usda' ? await fdcLabel(Number(id)) : source === 'off' ? await offLabel(id) : null;
   } catch { /* fall through to 404 */ }
-  if (!label) return void res.status(404).type('html').send(SHELL);
-  res.type('html').send(renderFoodPage(label));
+  if (!label) return void res.status(404).type('html').send(stamp(SHELL));
+  res.type('html').send(stamp(renderFoodPage(label)));
 });
 
 // ── robots.txt + sitemaps ──────────────────────────────────────────────────

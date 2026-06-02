@@ -102,10 +102,11 @@ async function search() {
     const grade = item.grade && /^[a-e]$/.test(item.grade)
       ? `<span class="nutri nutri-${item.grade}">${item.grade.toUpperCase()}</span>` : '';
     const kcal = item.kcal != null ? `<span class="kcal">${Math.round(item.kcal)} kcal/100g</span>` : '';
+    const giChip = item.gi != null ? `<span class="gi-chip gi-${item.giCategory}">GI ${item.gi}</span>` : '';
     const vc = item.variantCount > 1 ? `<span class="vcount">· ${item.variantCount} variants</span>` : '';
     b.innerHTML =
       `<span class="badge ${item.source}">${item.source}</span>` +
-      `<span class="title">${esc(item.title)}</span>${grade}` +
+      `<span class="title">${esc(item.title)}</span>${grade}${giChip}` +
       `<div class="sub">${esc(item.sub || '')}${kcal}${vc}</div>`;
     b.onclick = (e) => {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; // let new-tab work
