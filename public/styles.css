@@ -112,6 +112,10 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
 .nutri-c { background: #fecb02; color: #5a4a00; }
 .nutri-d { background: #ee8100; color: #fff; }
 .nutri-e { background: #e63e11; color: #fff; }
+/* Compact grade chips (Nutri-Score / NOVA) with hover explainers */
+.grade-chip { font-size: 10px; font-weight: 800; line-height: 1.4; padding: 1px 5px;
+  border-radius: 3px; margin-left: .3rem; cursor: help; vertical-align: middle; letter-spacing: 0; }
+.nf .nf-grades .grade-chip { margin-left: 0; }
 
 /* ── FDA-style Nutrition Facts label ───────────────────────────── */
 .label-panel { }
@@ -123,7 +127,8 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
 .nf .brand { font-size: 11px; color: #333; }
 .nf .name { font-size: 19px; font-weight: 800; line-height: 1.2; margin-bottom: 4px; }
 .nf .title { font-size: 30px; font-weight: 800; border-bottom: 1px solid #000; letter-spacing: -.5px; }
-.nf .serving { font-size: 12px; padding: 2px 0; }
+.nf .serving { font-size: 12px; padding: 2px 0; display: flex; align-items: center; gap: 4px; }
+.nf .nf-grades { margin-left: auto; display: flex; gap: 4px; }
 .nf .serving-select { font: inherit; font-size: 12px; color: #000; background: #fff;
   border: 1px solid #000; border-radius: 3px; padding: 1px 3px; max-width: 200px; }
 .nf .bar { border-top: 10px solid #000; }

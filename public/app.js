@@ -8,6 +8,15 @@ const compareModal = document.getElementById('compare-modal');
 const compareLabels = document.getElementById('compare-labels');
 const compareList = []; // {source, id, title}
 
+// Small grade chips (Nutri-Score / NOVA) with hover explainers.
+const NOVA_LABEL = ['', 'Unprocessed or minimally processed', 'Processed culinary ingredients',
+  'Processed foods', 'Ultra-processed foods'];
+const nutriTitle = (g) => `Nutri-Score ${g.toUpperCase()} — overall nutritional quality (A = best, E = worst)`;
+const novaTitle = (n) => `NOVA ${n} — ${NOVA_LABEL[n] || ''} (1 = unprocessed … 4 = ultra-processed)`;
+const nutriChip = (g) => (g && /^[a-e]$/.test(g))
+  ? `<span class="nutri nutri-${g} grade-chip" title="${nutriTitle(g)}">${g.toUpperCase()}</span>` : '';
+const novaChip = (n) => n ? `<span class="nova nova-${n} grade-chip" title="${novaTitle(n)}">${n}</span>` : '';
+
 // FDA Daily Values (2,000 kcal) and display units per normalized field.
 const DV = { fat: 78, satFat: 20, cholesterol: 300, sodium: 2300, carbs: 275,
   fiber: 28, addedSugars: 50, vitaminD: 20, calcium: 1300, iron: 18, potassium: 4700, vitaminC: 90 };
@@ -99,8 +108,7 @@ async function search() {
     const b = document.createElement('a');
     b.className = 'result';
     b.href = `/food/${item.source}/${encodeURIComponent(item.id)}`;
-    const grade = item.grade && /^[a-e]$/.test(item.grade)
-      ? `<span class="nutri nutri-${item.grade}">${item.grade.toUpperCase()}</span>` : '';
+    const grade = nutriChip(item.grade);
     const kcal = item.kcal != null ? `<span class="kcal">${Math.round(item.kcal)} kcal/100g</span>` : '';
     const giChip = item.gi != null ? `<span class="gi-chip gi-${item.giCategory}">GI ${item.gi}</span>` : '';
     const vc = item.variantCount > 1 ? `<span class="vcount">· ${item.variantCount} variants</span>` : '';
@@ -286,19 +294,16 @@ function renderLabel(d, idx = 0) {
 
   const options = servings.map((s, i) => `<option value="${i}">${esc(s.label)}</option>`).join('');
 
-  // Nutri-Score + NOVA processing badges (OFF only).
-  const badges =
-    (d.grade ? `<span class="nutri nutri-${d.grade}">Nutri-Score ${d.grade.toUpperCase()}</span>` : '') +
-    (d.nova ? `<span class="nova nova-${d.nova}">NOVA ${d.nova} · ${['','unprocessed','processed culinary','processed','ultra-processed'][d.nova] || ''}</span>` : '');
+  // Nutri-Score + NOVA processing chips (OFF only), shown right of the serving.
+  const grades = nutriChip(d.grade) + novaChip(d.nova);
 
   return `
   <div class="nf">
     ${d.brand ? `<img class="nf-logo" data-brand="${esc(d.brand)}" alt="" hidden />` : ''}
     ${d.brand ? `<p class="brand">${esc(d.brand)}</p>` : ''}
     <p class="name">${esc(d.title)}</p>
-    ${badges ? `<p class="nf-badges">${badges}</p>` : ''}
     <p class="title">Nutrition Facts</p>
-    <p class="serving">Amount per <select id="serving-select" class="serving-select">${options}</select></p>
+    <p class="serving">Amount per <select id="serving-select" class="serving-select">${options}</select>${grades ? `<span class="nf-grades">${grades}</span>` : ''}</p>
     <div class="bar"></div>
     <div class="cal-row"><span class="lbl">Calories</span><span class="val">${cal}</span></div>
     <p class="dv-head">% Daily Value*</p>
