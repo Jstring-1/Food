@@ -21,6 +21,7 @@ app.use(express.static(PUBLIC_DIR, {
 }));
 
 app.get('/', (_req, res) => res.type('html').set('Cache-Control', 'no-cache').send(stamp(SHELL)));
+app.get('/favicon.ico', (_req, res) => res.redirect(301, '/favicon.svg'));
 
 function escHtml(s: unknown): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
@@ -658,6 +659,7 @@ function contentPage(title: string, desc: string, body: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>${escHtml(title)}</title><meta name="description" content="${escHtml(desc)}"/>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
 <link rel="canonical" href="${ORIGIN}/"/><link rel="stylesheet" href="/styles.css"/></head>
 <body><header><a href="/" class="brand">FoodLand.fyi</a></header>
 <main style="display:block;max-width:760px"><div class="page">${body}</div></main>
