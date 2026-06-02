@@ -382,6 +382,79 @@ const FDC_NUTRIENTS: Record<string, { names: string[]; unit?: string }> = {
   vitaminC: { names: ['Vitamin C, total ascorbic acid'] },
 };
 
+// Extended nutrient detail (USDA whole foods carry ~100 nutrients). Grouped for
+// a collapsed "Full nutrient detail" expander; each item maps a display name to
+// the USDA nutrient name(s). Only items/sections with data are returned.
+const FDC_DETAIL: { title: string; items: { label: string; names: string[] }[] }[] = [
+  { title: 'Vitamins', items: [
+    { label: 'Vitamin A (RAE)', names: ['Vitamin A, RAE'] },
+    { label: 'Vitamin E', names: ['Vitamin E (alpha-tocopherol)'] },
+    { label: 'Vitamin K', names: ['Vitamin K (phylloquinone)'] },
+    { label: 'Thiamin (B1)', names: ['Thiamin'] },
+    { label: 'Riboflavin (B2)', names: ['Riboflavin'] },
+    { label: 'Niacin (B3)', names: ['Niacin'] },
+    { label: 'Pantothenic acid (B5)', names: ['Pantothenic acid'] },
+    { label: 'Vitamin B6', names: ['Vitamin B-6'] },
+    { label: 'Folate (B9, DFE)', names: ['Folate, DFE', 'Folate, total'] },
+    { label: 'Vitamin B12', names: ['Vitamin B-12'] },
+    { label: 'Choline', names: ['Choline, total'] },
+  ] },
+  { title: 'Minerals', items: [
+    { label: 'Magnesium', names: ['Magnesium, Mg'] },
+    { label: 'Phosphorus', names: ['Phosphorus, P'] },
+    { label: 'Zinc', names: ['Zinc, Zn'] },
+    { label: 'Copper', names: ['Copper, Cu'] },
+    { label: 'Manganese', names: ['Manganese, Mn'] },
+    { label: 'Selenium', names: ['Selenium, Se'] },
+  ] },
+  { title: 'Fat detail', items: [
+    { label: 'Monounsaturated', names: ['Fatty acids, total monounsaturated'] },
+    { label: 'Polyunsaturated', names: ['Fatty acids, total polyunsaturated'] },
+    { label: 'Omega-3 (ALA 18:3)', names: ['PUFA 18:3'] },
+    { label: 'Omega-6 (LA 18:2)', names: ['PUFA 18:2'] },
+  ] },
+  { title: 'Carbohydrate detail', items: [
+    { label: 'Starch', names: ['Starch'] },
+    { label: 'Glucose', names: ['Glucose'] },
+    { label: 'Fructose', names: ['Fructose'] },
+    { label: 'Sucrose', names: ['Sucrose'] },
+    { label: 'Lactose', names: ['Lactose'] },
+    { label: 'Maltose', names: ['Maltose'] },
+  ] },
+  { title: 'Amino acids', items: [
+    { label: 'Tryptophan', names: ['Tryptophan'] }, { label: 'Threonine', names: ['Threonine'] },
+    { label: 'Isoleucine', names: ['Isoleucine'] }, { label: 'Leucine', names: ['Leucine'] },
+    { label: 'Lysine', names: ['Lysine'] }, { label: 'Methionine', names: ['Methionine'] },
+    { label: 'Cystine', names: ['Cystine'] }, { label: 'Phenylalanine', names: ['Phenylalanine'] },
+    { label: 'Tyrosine', names: ['Tyrosine'] }, { label: 'Valine', names: ['Valine'] },
+    { label: 'Arginine', names: ['Arginine'] }, { label: 'Histidine', names: ['Histidine'] },
+    { label: 'Alanine', names: ['Alanine'] }, { label: 'Aspartic acid', names: ['Aspartic acid'] },
+    { label: 'Glutamic acid', names: ['Glutamic acid'] }, { label: 'Glycine', names: ['Glycine'] },
+    { label: 'Proline', names: ['Proline'] }, { label: 'Serine', names: ['Serine'] },
+  ] },
+];
+
+// USDA unit codes → display units. Amounts are per 100 g (client scales).
+const UNIT_DISPLAY: Record<string, string> = { G: 'g', MG: 'mg', UG: 'µg', IU: 'IU', KCAL: 'kcal' };
+
+function buildDetail(rows: { name: string; unit_name: string; amount: number | null }[]) {
+  const byName = new Map<string, { amount: number; unit: string }>();
+  for (const r of rows) {
+    if (r.amount == null || byName.has(r.name)) continue;
+    byName.set(r.name, { amount: Number(r.amount), unit: UNIT_DISPLAY[r.unit_name] || (r.unit_name || '').toLowerCase() });
+  }
+  const out: { title: string; items: { label: string; amount: number; unit: string }[] }[] = [];
+  for (const sec of FDC_DETAIL) {
+    const items: { label: string; amount: number; unit: string }[] = [];
+    for (const it of sec.items) {
+      const hit = it.names.map((nm) => byName.get(nm)).find(Boolean);
+      if (hit) items.push({ label: it.label, amount: +hit.amount.toFixed(4), unit: hit.unit });
+    }
+    if (items.length) out.push({ title: sec.title, items });
+  }
+  return out;
+}
+
 async function fdcLabel(id: number) {
   const food = await pool.query(
     `SELECT f.fdc_id, f.description, f.data_type, f.food_category,
@@ -432,6 +505,7 @@ async function fdcLabel(id: number) {
     servings: buildServings(servingGrams, f.household_serving),
     ingredients: f.ingredients || '',
     n,
+    detail: buildDetail(nut.rows),
     nova: null,
     grade: null,
     allergens: [],
@@ -506,6 +580,7 @@ async function offLabel(code: string) {
       potassium: gToMg(p.potassium_100g),
       vitaminC: gToMg(p.vitamin_c_100g),
     },
+    detail: [],
     nova: p.nova_group == null ? null : Number(p.nova_group),
     grade: /^[a-e]$/.test(p.nutriscore_grade || '') ? p.nutriscore_grade : null,
     allergens: parseAllergens(p.allergens),

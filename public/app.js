@@ -336,7 +336,24 @@ function renderLabel(d, idx = 0) {
     ${ingredientsHtml(d.ingredients)}
   </div>
   ${glyViz(n, d)}
-  ${sugarViz(n.sugars)}`;
+  ${sugarViz(n.sugars)}
+  ${detailViz(d.detail, factor)}`;
+}
+
+// Collapsed expander of extended nutrients (USDA whole foods). Amounts are
+// per-100g from the API; scaled to the chosen serving like the rest of the label.
+function detailViz(detail, factor) {
+  if (!detail || !detail.length) return '';
+  const fmtAmt = (v, u) => {
+    const x = v * factor;
+    const dp = x >= 10 ? 1 : x >= 1 ? 2 : 3;
+    return `${x.toLocaleString(undefined, { maximumFractionDigits: dp })} ${u}`;
+  };
+  const secs = detail.map((sec) => {
+    const rows = sec.items.map((it) => `<tr><td>${esc(it.label)}</td><td>${fmtAmt(it.amount, it.unit)}</td></tr>`).join('');
+    return `<div class="detail-sec"><h4>${esc(sec.title)}</h4><table>${rows}</table></div>`;
+  }).join('');
+  return `<details class="nf-detail"><summary>Full nutrient detail</summary><div class="detail-body">${secs}</div></details>`;
 }
 
 // Diabetic-relevant block: Glycemic Index / Load, shown only when GI is known.
