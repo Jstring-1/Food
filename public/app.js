@@ -249,7 +249,11 @@ async function downloadLabel(body, d) {
     sel.style.display = 'none';
     sel.insertAdjacentElement('afterend', span);
   }
-  if (ring) ring.style.visibility = 'hidden';
+  if (ring) ring.style.display = 'none'; // conic-gradient won't rasterize; legend keeps the %s
+  // Expand every collapsible section so the PNG holds the complete nutrient data.
+  const sections = [...nf.querySelectorAll('.nf-detail')];
+  const wasOpen = sections.map((s) => s.open);
+  sections.forEach((s) => { s.open = true; });
   try {
     const canvas = await window.html2canvas(nf, { backgroundColor: '#ffffff', scale: 2, logging: false, useCORS: true });
     const url = canvas.toDataURL('image/png');
@@ -262,7 +266,8 @@ async function downloadLabel(body, d) {
   } finally {
     if (span) span.remove();
     if (sel) sel.style.display = '';
-    if (ring) ring.style.visibility = '';
+    if (ring) ring.style.display = '';
+    sections.forEach((s, i) => { s.open = wasOpen[i]; });
     if (dl) dl.style.visibility = '';
   }
 }
