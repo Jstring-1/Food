@@ -45,21 +45,17 @@ main {
   box-shadow: inset 0 -2px 0 rgba(0,0,0,.12); }
 .sugar-cubes .cube-more { align-self: center; color: #9a9ab0; font-size: .8rem; margin-left: 2px; }
 
-/* Extended nutrient detail expander (below the label) */
-.nf-detail { max-width: 320px; margin-top: 10px; background: #16161f;
-  border: 1px solid #2a2a3a; border-radius: 8px; }
-.nf-detail > summary { cursor: pointer; padding: 8px 12px; font-size: .85rem; color: #c9ccff;
-  list-style: none; user-select: none; }
+/* Extended nutrient detail — inside the label, one collapsible per section */
+.nf-detail-group { margin: 4px 0 2px; border-top: 4px solid #000; }
+.nf-detail { border-bottom: 1px solid #000; }
+.nf-detail > summary { cursor: pointer; padding: 4px 0; font-size: 13px; font-weight: 700;
+  color: #000; list-style: none; user-select: none; }
 .nf-detail > summary::-webkit-details-marker { display: none; }
-.nf-detail > summary::before { content: '▸ '; color: #6e6eff; }
-.nf-detail[open] > summary::before { content: '▾ '; }
-.nf-detail .detail-body { padding: 0 12px 10px; }
-.detail-sec { margin-top: 8px; }
-.detail-sec h4 { margin: 0 0 2px; font-size: .72rem; text-transform: uppercase;
-  letter-spacing: .05em; color: #8a8aa0; }
-.detail-sec table { width: 100%; border-collapse: collapse; }
-.detail-sec td { font-size: .8rem; padding: 1px 0; color: #d8d8e4; border-bottom: 1px solid #20202c; }
-.detail-sec td:last-child { text-align: right; color: #fff; white-space: nowrap; }
+.nf-detail > summary::before { content: '+ '; font-weight: 700; }
+.nf-detail[open] > summary::before { content: '– '; }
+.detail-table { width: 100%; border-collapse: collapse; margin: 0 0 6px; }
+.detail-table td { font-size: 12px; padding: 1px 0; color: #000; border-bottom: 1px solid #ddd; }
+.detail-table td:last-child { text-align: right; white-space: nowrap; }
 
 input[type="search"] {
   width: 100%; padding: .8rem 1rem; font-size: 1rem; border-radius: 10px;
@@ -176,12 +172,21 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
   border: 1px solid #b6dcc2; padding: 1px 6px; border-radius: 10px; }
 
 /* Macro calorie ring */
-.macros { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid #000; }
-.macros .ring { width: 64px; height: 64px; border-radius: 50%; position: relative; flex: none; }
-.macros .ring-hole { position: absolute; inset: 14px; background: #fff; border-radius: 50%; }
-.macros .macro-legend { list-style: none; margin: 0; padding: 0; font-size: 11px; color: #000; }
-.macros .macro-legend li { display: flex; align-items: center; gap: 6px; padding: 1px 0; }
-.macros .macro-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+/* Compact summary strip below the serving line: macro ring + GI/GL chips */
+.nf-top { display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px; padding: 4px 0 2px; }
+.macros { display: flex; align-items: center; gap: 8px; padding: 0; }
+.macros .ring { width: 44px; height: 44px; border-radius: 50%; position: relative; flex: none; }
+.macros .ring-hole { position: absolute; inset: 10px; background: #fff; border-radius: 50%; }
+.macros .macro-legend { list-style: none; margin: 0; padding: 0; font-size: 10px; color: #000; }
+.macros .macro-legend li { display: flex; align-items: center; gap: 4px; padding: 0; }
+.macros .macro-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.gly-chips { display: flex; gap: 4px; }
+.gly-chip { font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 4px;
+  background: #eee; color: #333; cursor: help; white-space: nowrap; }
+.gly-chip.gi-low { background: #e3f4e7; color: #1e6b34; }
+.gly-chip.gi-medium { background: #fbf2dc; color: #6b5410; }
+.gly-chip.gi-high { background: #fbe3df; color: #8a2a1a; }
 
 /* ── Content pages (docs, leaders) ─────────────────────────────── */
 .page { padding: .5rem 0 2rem; }
@@ -251,18 +256,6 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
 .additive-warn.avoid { color: #8a0016; background: #ffdcdc; text-decoration-color: #b00020; }
 .additive-warn.caution { color: #6b4500; background: #ffedc2; text-decoration-color: #b07b00; }
 
-/* ── Glycemic / diabetic block ─────────────────────────────────── */
-.gly-viz { max-width: 320px; margin-top: 10px; padding: 10px 12px; background: #16161f;
-  border: 1px solid #2a2a3a; border-radius: 8px; }
-.gly-grid { display: flex; gap: 8px; }
-.gly-card { flex: 1; background: #0e0e14; border: 1px solid #2a2a3a; border-radius: 6px;
-  padding: 8px 6px; text-align: center; }
-.gly-n { display: block; font-size: 1.25rem; font-weight: 800; color: #e6e6ef; line-height: 1.1; }
-.gly-l { display: block; font-size: .62rem; color: #8a8aa0; margin-top: 3px; text-transform: uppercase; letter-spacing: .03em; }
-.gly-n.gi-low { color: #5fbf77; }
-.gly-n.gi-medium { color: #e6c07a; }
-.gly-n.gi-high { color: #e8806b; }
-.gly-src { margin: 8px 0 0; font-size: .68rem; color: #8a8aa0; line-height: 1.35; }
 
 /* GI chip on search results */
 .gi-chip { margin-left: .5rem; font-size: .68rem; font-weight: 700; padding: .05rem .35rem;

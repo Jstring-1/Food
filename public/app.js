@@ -303,6 +303,9 @@ function renderLabel(d, idx = 0) {
   const netRow = netCarbs == null ? '' :
     `<tr><td class="ind net-carbs" title="Net carbs = Total Carbohydrate − Dietary Fiber">Net Carbs ${fmt(netCarbs, 'g')}</td><td class="dv"></td></tr>`;
 
+  // Compact summary strip (macro ring + GI/GL chips) shown just below serving.
+  const top = macroRing(n) + glyChips(n, d);
+
   return `
   <div class="nf">
     <button type="button" class="dl-label" title="Download label as image" aria-label="Download label as image">⬇</button>
@@ -311,6 +314,7 @@ function renderLabel(d, idx = 0) {
     <p class="name">${esc(d.title)}</p>
     <p class="title">Nutrition Facts</p>
     <p class="serving">Amount per <select id="serving-select" class="serving-select">${options}</select>${grades ? `<span class="nf-grades">${grades}</span>` : ''}</p>
+    ${top ? `<div class="nf-top">${top}</div>` : ''}
     <div class="bar"></div>
     <div class="cal-row"><span class="lbl">Calories</span><span class="val">${cal}</span></div>
     <p class="dv-head">% Daily Value*</p>
@@ -329,19 +333,18 @@ function renderLabel(d, idx = 0) {
       ${micros}
     </table>
     ${micros ? '' : '<p class="na">Vitamin/mineral detail not available for this source.</p>'}
-    ${macroRing(n)}
+    ${detailViz(d.detail, factor)}
     <p class="footnote">* The % Daily Value tells you how much a nutrient in a serving contributes to a daily diet. 2,000 calories a day is used for general nutrition advice.</p>
     ${d.allergens && d.allergens.length ? `<p class="nf-allergens"><b>Allergens:</b> ${d.allergens.map(esc).join(', ')}</p>` : ''}
     ${d.diet && d.diet.length ? `<p class="nf-diet">${d.diet.map((x) => `<span class="diet-badge">${esc(x)}</span>`).join('')}</p>` : ''}
     ${ingredientsHtml(d.ingredients)}
   </div>
-  ${glyViz(n, d)}
-  ${sugarViz(n.sugars)}
-  ${detailViz(d.detail, factor)}`;
+  ${sugarViz(n.sugars)}`;
 }
 
-// Collapsed expander of extended nutrients (USDA whole foods). Amounts are
-// per-100g from the API; scaled to the chosen serving like the rest of the label.
+// Extended nutrients (USDA whole foods), rendered inside the label as one
+// collapsible block per section. Amounts are per-100g from the API; scaled to
+// the chosen serving like the rest of the label.
 function detailViz(detail, factor) {
   if (!detail || !detail.length) return '';
   const fmtAmt = (v, u) => {
@@ -351,22 +354,22 @@ function detailViz(detail, factor) {
   };
   const secs = detail.map((sec) => {
     const rows = sec.items.map((it) => `<tr><td>${esc(it.label)}</td><td>${fmtAmt(it.amount, it.unit)}</td></tr>`).join('');
-    return `<div class="detail-sec"><h4>${esc(sec.title)}</h4><table>${rows}</table></div>`;
+    return `<details class="nf-detail"><summary>${esc(sec.title)}</summary><table class="detail-table">${rows}</table></details>`;
   }).join('');
-  return `<details class="nf-detail"><summary>Full nutrient detail</summary><div class="detail-body">${secs}</div></details>`;
+  return `<div class="nf-detail-group">${secs}</div>`;
 }
 
-// Diabetic-relevant block: Glycemic Index / Load, shown only when GI is known.
-function glyViz(n, d) {
+// Compact Glycemic Index / Load chips (shown in the top strip when GI is known).
+function glyChips(n, d) {
   if (n.carbs == null || d.gi == null) return '';
   const net = Math.max(0, n.carbs - (n.fiber || 0));
   const gl = (d.gi * net) / 100;
   const glCat = gl <= 10 ? 'low' : gl <= 19 ? 'medium' : 'high';
-  const cards =
-    `<div class="gly-card"><span class="gly-n gi-${d.giCategory}">${d.gi}</span><span class="gly-l">Glycemic Index · ${d.giCategory}</span></div>` +
-    `<div class="gly-card"><span class="gly-n gi-${glCat}">${gl.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span><span class="gly-l">Glycemic Load · ${glCat}</span></div>`;
-  const src = `<p class="gly-src">GI from published tables (≈ "${esc(d.giSource)}"). GL = GI × net carbs ÷ 100, per serving.</p>`;
-  return `<div class="gly-viz"><div class="gly-grid">${cards}</div>${src}</div>`;
+  const glText = gl.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  return `<div class="gly-chips">`
+    + `<span class="gly-chip gi-${d.giCategory}" title="Glycemic Index (${d.giCategory}) — from published tables (≈ &quot;${esc(d.giSource || '')}&quot;)">GI ${d.gi}</span>`
+    + `<span class="gly-chip gi-${glCat}" title="Glycemic Load (${glCat}) = GI × net carbs ÷ 100, per serving">GL ${glText}</span>`
+    + `</div>`;
 }
 
 // Visualize sugar as ~4 g sugar cubes for the current serving.
