@@ -23,7 +23,7 @@ async function topBrands(): Promise<string[]> {
           FROM off_product WHERE brands <> '' GROUP BY 1
         UNION ALL
         SELECT coalesce(NULLIF(brand_name, ''), brand_owner) AS brand, count(*) n
-          FROM fdc_food
+          FROM fdc_branded
          WHERE coalesce(NULLIF(brand_name, ''), brand_owner) IS NOT NULL
            AND coalesce(NULLIF(brand_name, ''), brand_owner) <> ''
          GROUP BY 1
