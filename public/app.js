@@ -239,6 +239,8 @@ async function downloadLabel(body, d) {
   // can't render conic-gradient, so it would draw an empty circle).
   const sel = nf.querySelector('#serving-select');
   const ring = nf.querySelector('.macros .ring');
+  const dl = nf.querySelector('.dl-label');
+  if (dl) dl.style.visibility = 'hidden';
   let span = null;
   if (sel) {
     span = document.createElement('span');
@@ -261,6 +263,7 @@ async function downloadLabel(body, d) {
     if (span) span.remove();
     if (sel) sel.style.display = '';
     if (ring) ring.style.visibility = '';
+    if (dl) dl.style.visibility = '';
   }
 }
 
@@ -296,9 +299,13 @@ function renderLabel(d, idx = 0) {
 
   // Nutri-Score + NOVA processing chips (OFF only), shown right of the serving.
   const grades = nutriChip(d.grade) + novaChip(d.nova);
+  const netCarbs = n.carbs == null ? null : Math.max(0, n.carbs - (n.fiber || 0));
+  const netRow = netCarbs == null ? '' :
+    `<tr><td class="ind net-carbs" title="Net carbs = Total Carbohydrate − Dietary Fiber">Net Carbs ${fmt(netCarbs, 'g')}</td><td class="dv"></td></tr>`;
 
   return `
   <div class="nf">
+    <button type="button" class="dl-label" title="Download label as image" aria-label="Download label as image">⬇</button>
     ${d.brand ? `<img class="nf-logo" data-brand="${esc(d.brand)}" alt="" hidden />` : ''}
     ${d.brand ? `<p class="brand">${esc(d.brand)}</p>` : ''}
     <p class="name">${esc(d.title)}</p>
@@ -315,6 +322,7 @@ function renderLabel(d, idx = 0) {
       ${row('', 'Sodium', 'sodium', n, { bold: true })}
       ${row('', 'Total Carbohydrate', 'carbs', n, { bold: true })}
       ${row('ind', 'Dietary Fiber', 'fiber', n)}
+      ${netRow}
       ${n.sugars != null ? `<tr><td class="ind">Total Sugars ${fmt(n.sugars, 'g')}</td><td class="dv"></td></tr>` : ''}
       ${added}
       <tr class="thick">${`<td><b>Protein</b>${n.protein == null ? '' : ' ' + fmt(n.protein, 'g')}</td><td class="dv"></td>`}</tr>
@@ -328,25 +336,19 @@ function renderLabel(d, idx = 0) {
     ${ingredientsHtml(d.ingredients)}
   </div>
   ${glyViz(n, d)}
-  ${sugarViz(n.sugars)}
-  <button type="button" class="dl-label">⬇ Download label as image</button>`;
+  ${sugarViz(n.sugars)}`;
 }
 
-// Diabetic-relevant block: net carbs (always), plus GI/GL when GI is known.
+// Diabetic-relevant block: Glycemic Index / Load, shown only when GI is known.
 function glyViz(n, d) {
-  if (n.carbs == null) return '';
+  if (n.carbs == null || d.gi == null) return '';
   const net = Math.max(0, n.carbs - (n.fiber || 0));
-  let cards = `<div class="gly-card"><span class="gly-n">${net.toLocaleString(undefined, { maximumFractionDigits: 1 })}g</span><span class="gly-l">Net carbs</span></div>`;
-  let src;
-  if (d.gi != null) {
-    const gl = (d.gi * net) / 100;
-    const glCat = gl <= 10 ? 'low' : gl <= 19 ? 'medium' : 'high';
-    cards += `<div class="gly-card"><span class="gly-n gi-${d.giCategory}">${d.gi}</span><span class="gly-l">Glycemic Index · ${d.giCategory}</span></div>`;
-    cards += `<div class="gly-card"><span class="gly-n gi-${glCat}">${gl.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span><span class="gly-l">Glycemic Load · ${glCat}</span></div>`;
-    src = `<p class="gly-src">GI from published tables (≈ "${esc(d.giSource)}"). GL = GI × net carbs ÷ 100, per serving.</p>`;
-  } else {
-    src = `<p class="gly-src">Net carbs = total carbs − fiber. Glycemic index not available for this food.</p>`;
-  }
+  const gl = (d.gi * net) / 100;
+  const glCat = gl <= 10 ? 'low' : gl <= 19 ? 'medium' : 'high';
+  const cards =
+    `<div class="gly-card"><span class="gly-n gi-${d.giCategory}">${d.gi}</span><span class="gly-l">Glycemic Index · ${d.giCategory}</span></div>` +
+    `<div class="gly-card"><span class="gly-n gi-${glCat}">${gl.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span><span class="gly-l">Glycemic Load · ${glCat}</span></div>`;
+  const src = `<p class="gly-src">GI from published tables (≈ "${esc(d.giSource)}"). GL = GI × net carbs ÷ 100, per serving.</p>`;
   return `<div class="gly-viz"><div class="gly-grid">${cards}</div>${src}</div>`;
 }
 
@@ -358,10 +360,8 @@ function sugarViz(sugars) {
   const icons = Array.from({ length: shown }, () => '<span class="cube"></span>').join('');
   const more = count > shown ? `<span class="cube-more">+${count - shown}</span>` : '';
   const label = count >= 1 ? `${count} sugar cube${count === 1 ? '' : 's'}` : 'under 1 sugar cube';
-  return `<div class="sugar-viz">
-    <div class="sugar-cubes">${icons}${more}</div>
-    <p class="sugar-cap">≈ ${label} · ${(+sugars).toFixed(1)} g sugar <span class="cube-note">(1 cube ≈ 4 g)</span></p>
-  </div>`;
+  const cap = `≈ ${label} · ${(+sugars).toFixed(1)} g sugar (1 cube ≈ 4 g)`;
+  return `<div class="sugar-cubes" title="${cap}" aria-label="${cap}">${icons}${more}</div>`;
 }
 
 // Ingredients line with flagged-additive warnings (hover for details).
