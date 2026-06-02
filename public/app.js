@@ -195,7 +195,9 @@ async function renderInto(source, id) {
   const body = document.getElementById('label-body');
   const r = await fetch(`/api/food?source=${source}&id=${encodeURIComponent(id)}`);
   if (!r.ok) { body.innerHTML = '<p class="meta">Could not load.</p>'; return; }
-  paintLabel(body, await r.json(), 0);
+  const d = await r.json();
+  const idx = Math.max(0, (d.servings || []).findIndex((s) => s.grams === 100));
+  paintLabel(body, d, idx);
 }
 
 // Render the label at serving index `idx`, wiring the serving dropdown to
