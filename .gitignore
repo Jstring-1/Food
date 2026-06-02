@@ -4,7 +4,8 @@ dist/
 *.log
 
 # data dumps — never commit these (gigabytes; re-download instead)
-data/
+# anchored to repo root so it does NOT match src/data/ (committed source)
+/data/
 *.csv
 *.jsonl
 *.jsonl.gz
