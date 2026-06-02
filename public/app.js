@@ -335,6 +335,9 @@ function sugarViz(sugars) {
 // Ingredients line with flagged-additive warnings (hover for details).
 function ingredientsHtml(raw) {
   if (!raw) return '';
+  // OFF ingredient text sometimes contains HTML (e.g. <span class="allergen">…</span>); strip it.
+  raw = raw.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  if (!raw) return '';
   const { html, count } = highlightAdditives(raw);
   const warn = count > 0
     ? `<p class="additive-note">⚠ ${count} flagged additive${count === 1 ? '' : 's'} — hover for details</p>` : '';
