@@ -124,6 +124,13 @@ CREATE INDEX IF NOT EXISTS off_brands_idx ON off_product USING gin (brands gin_t
 -- International Tables of GI; optionally extended via npm run ingest:gi with a
 -- CSV (GI_CSV). Matched to USDA whole foods by keyword at label time.
 -- ──────────────────────────────────────────────────────────────────────────
+-- Brand logo cache (resolved once per brand from Brandfetch; URL may be null).
+CREATE TABLE IF NOT EXISTS brand_logos (
+  brand_key   TEXT PRIMARY KEY,
+  logo_url    TEXT,
+  fetched_at  TIMESTAMPTZ DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS gi_values (
   id        SERIAL PRIMARY KEY,
   name      TEXT NOT NULL,

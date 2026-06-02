@@ -158,6 +158,7 @@ async function openCompare() {
     const idx = Math.max(0, (d.servings || []).findIndex((s) => s.grams === 100));
     return `<div class="cmp-col">${renderLabel(d, idx)}</div>`;
   }).join('');
+  loadLogos(compareLabels);
 }
 
 document.getElementById('compare-close').onclick = () => { compareModal.hidden = true; };
@@ -197,6 +198,18 @@ function paintLabel(body, d, idx) {
   if (sel) { sel.selectedIndex = idx; sel.onchange = () => paintLabel(body, d, sel.selectedIndex); }
   const dl = body.querySelector('.dl-label');
   if (dl) dl.onclick = () => downloadLabel(body, d);
+  loadLogos(body);
+}
+
+// Fill brand-logo <img> placeholders from the cached /api/logo endpoint.
+async function loadLogos(root) {
+  for (const img of root.querySelectorAll('.nf-logo[data-brand]:not([data-done])')) {
+    img.dataset.done = '1';
+    try {
+      const { url } = await (await fetch('/api/logo?brand=' + encodeURIComponent(img.dataset.brand))).json();
+      if (url) { img.src = url; img.alt = img.dataset.brand; img.hidden = false; }
+    } catch { /* leave hidden */ }
+  }
 }
 
 // Rasterize the live FDA label node to a PNG via html2canvas (reliable; paints
@@ -270,6 +283,7 @@ function renderLabel(d, idx = 0) {
 
   return `
   <div class="nf">
+    ${d.brand ? `<img class="nf-logo" data-brand="${esc(d.brand)}" alt="" hidden />` : ''}
     ${d.brand ? `<p class="brand">${esc(d.brand)}</p>` : ''}
     <p class="name">${esc(d.title)}</p>
     ${badges ? `<p class="nf-badges">${badges}</p>` : ''}

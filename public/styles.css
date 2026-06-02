@@ -245,3 +245,7 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
 .gi-chip.gi-low { background: #1f3d1f; color: #8fe08f; }
 .gi-chip.gi-medium { background: #3a361f; color: #e6c07a; }
 .gi-chip.gi-high { background: #3d1f1f; color: #e8806b; }
+
+/* Brand logo on the label */
+.nf .nf-logo { float: right; max-width: 56px; max-height: 40px; margin: 0 0 4px 6px;
+  object-fit: contain; background: #fff; }

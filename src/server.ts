@@ -58,6 +58,38 @@ app.get('/api/stats', async (_req, res) => {
   }
 });
 
+// Brand logo lookup via Brandfetch search (cached per brand in the DB).
+const BF_TOKEN = process.env.BRANDFETCH_API_TOKEN;
+const brandKey = (b: string) => b.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+app.get('/api/logo', async (req, res) => {
+  const brand = String(req.query.brand ?? '').trim();
+  const key = brandKey(brand);
+  if (!key) return void res.json({ url: null });
+  try {
+    const cached = await pool.query('SELECT logo_url FROM brand_logos WHERE brand_key = $1', [key]);
+    if (cached.rowCount) return void res.json({ url: cached.rows[0].logo_url });
+
+    let url: string | null = null;
+    try {
+      const r = await fetch(`https://api.brandfetch.io/v2/search/${encodeURIComponent(brand)}`,
+        { headers: BF_TOKEN ? { Authorization: `Bearer ${BF_TOKEN}` } : {} });
+      if (r.ok) {
+        const arr = await r.json();
+        url = (Array.isArray(arr) ? arr.find((x: any) => x.icon) : null)?.icon ?? null;
+      }
+    } catch { /* network/API issue → cache null, fall back to avatar */ }
+
+    await pool.query(
+      `INSERT INTO brand_logos (brand_key, logo_url) VALUES ($1, $2)
+       ON CONFLICT (brand_key) DO UPDATE SET logo_url = EXCLUDED.logo_url, fetched_at = now()`,
+      [key, url]);
+    res.json({ url });
+  } catch {
+    res.json({ url: null });
+  }
+});
+
 const numOrNull = (v: unknown) => {
   const n = Number(v);
   return v === '' || v == null || !Number.isFinite(n) ? null : n;
