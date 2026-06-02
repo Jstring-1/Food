@@ -15,6 +15,7 @@
     "ingest:gi": "tsx src/ingest/gi.ts",
     "dedupe:fdc": "tsx src/maintenance/dedupe-fdc.ts",
     "denormalize:fdc": "tsx src/maintenance/run-denormalize.ts",
+    "warm:logos": "tsx src/maintenance/warm-logos.ts",
     "counts": "tsx src/counts.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit"

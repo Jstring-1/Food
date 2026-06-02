@@ -104,10 +104,13 @@ async function search() {
     const kcal = item.kcal != null ? `<span class="kcal">${Math.round(item.kcal)} kcal/100g</span>` : '';
     const giChip = item.gi != null ? `<span class="gi-chip gi-${item.giCategory}">GI ${item.gi}</span>` : '';
     const vc = item.variantCount > 1 ? `<span class="vcount">· ${item.variantCount} variants</span>` : '';
-    b.innerHTML =
-      `<span class="badge ${item.source}">${item.source}</span>` +
-      `<span class="title">${esc(item.title)}</span>${grade}${giChip}` +
-      `<div class="sub">${esc(item.sub || '')}${kcal}${vc}</div>`;
+    const logo = item.brand ? `<img class="result-logo" data-brand="${esc(item.brand)}" alt="" hidden />` : '';
+    b.innerHTML = logo +
+      `<span class="result-main">` +
+        `<span class="badge ${item.source}">${item.source}</span>` +
+        `<span class="title">${esc(item.title)}</span>${grade}${giChip}` +
+        `<div class="sub">${esc(item.sub || '')}${kcal}${vc}</div>` +
+      `</span>`;
     b.onclick = (e) => {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; // let new-tab work
       e.preventDefault();
@@ -122,6 +125,7 @@ async function search() {
     b.appendChild(cmp);
     resultsEl.appendChild(b);
   }
+  loadLogos(resultsEl);
 }
 
 const cmpKey = (it) => `${it.source}:${it.id}`;
@@ -203,7 +207,7 @@ function paintLabel(body, d, idx) {
 
 // Fill brand-logo <img> placeholders from the cached /api/logo endpoint.
 async function loadLogos(root) {
-  for (const img of root.querySelectorAll('.nf-logo[data-brand]:not([data-done])')) {
+  for (const img of root.querySelectorAll('img[data-brand]:not([data-done])')) {
     img.dataset.done = '1';
     try {
       const { url } = await (await fetch('/api/logo?brand=' + encodeURIComponent(img.dataset.brand))).json();
