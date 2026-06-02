@@ -231,15 +231,6 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
 .compare-labels { display: flex; gap: 1rem; overflow: auto; padding: 0 1rem 1.5rem; align-items: flex-start; }
 .cmp-col { flex: 0 0 auto; }
 
-/* Download-label button */
-.dl-label {
-  position: absolute; top: 6px; right: 6px; z-index: 2;
-  width: 24px; height: 24px; padding: 0; line-height: 22px; text-align: center;
-  background: rgba(0,0,0,.08); color: rgba(0,0,0,.45); border: none; border-radius: 6px;
-  font-size: 14px; cursor: pointer;
-}
-.dl-label:hover { background: rgba(0,0,0,.2); color: rgba(0,0,0,.8); }
-
 /* ── Info popup (leaders / API) ────────────────────────────────── */
 .info-modal { position: fixed; inset: 0; z-index: 40; background: rgba(8,8,12,.8);
   display: flex; align-items: flex-start; justify-content: center; padding: 5vh 1rem; overflow: auto; }

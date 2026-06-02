@@ -214,8 +214,6 @@ function paintLabel(body, d, idx) {
   body.innerHTML = renderLabel(d, idx);
   const sel = body.querySelector('#serving-select');
   if (sel) { sel.selectedIndex = idx; sel.onchange = () => paintLabel(body, d, sel.selectedIndex); }
-  const dl = body.querySelector('.dl-label');
-  if (dl) dl.onclick = () => downloadLabel(body, d);
   loadLogos(body);
 }
 
@@ -227,48 +225,6 @@ async function loadLogos(root) {
       const { url } = await (await fetch('/api/logo?brand=' + encodeURIComponent(img.dataset.brand))).json();
       if (url) { img.src = url; img.alt = img.dataset.brand; img.hidden = false; }
     } catch { /* leave hidden */ }
-  }
-}
-
-// Rasterize the live FDA label node to a PNG via html2canvas (reliable; paints
-// straight to a canvas, unlike html-to-image's blank-prone SVG approach).
-async function downloadLabel(body, d) {
-  const nf = body.querySelector('.nf');
-  if (!nf || !window.html2canvas) return;
-  // Swap the serving dropdown for plain text; hide the macro ring (html2canvas
-  // can't render conic-gradient, so it would draw an empty circle).
-  const sel = nf.querySelector('#serving-select');
-  const ring = nf.querySelector('.macros .ring');
-  const dl = nf.querySelector('.dl-label');
-  if (dl) dl.style.visibility = 'hidden';
-  let span = null;
-  if (sel) {
-    span = document.createElement('span');
-    span.textContent = sel.options[sel.selectedIndex]?.text ?? '';
-    span.style.fontWeight = 'bold';
-    sel.style.display = 'none';
-    sel.insertAdjacentElement('afterend', span);
-  }
-  if (ring) ring.style.display = 'none'; // conic-gradient won't rasterize; legend keeps the %s
-  // Expand every collapsible section so the PNG holds the complete nutrient data.
-  const sections = [...nf.querySelectorAll('.nf-detail')];
-  const wasOpen = sections.map((s) => s.open);
-  sections.forEach((s) => { s.open = true; });
-  try {
-    const canvas = await window.html2canvas(nf, { backgroundColor: '#ffffff', scale: 2, logging: false, useCORS: true });
-    const url = canvas.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = (d?.title || 'nutrition-facts').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) + '-nutrition-facts.png';
-    a.click();
-  } catch (e) {
-    console.error('label download failed', e);
-  } finally {
-    if (span) span.remove();
-    if (sel) sel.style.display = '';
-    if (ring) ring.style.display = '';
-    sections.forEach((s, i) => { s.open = wasOpen[i]; });
-    if (dl) dl.style.visibility = '';
   }
 }
 
@@ -313,7 +269,6 @@ function renderLabel(d, idx = 0) {
 
   return `
   <div class="nf">
-    <button type="button" class="dl-label" title="Download label as image" aria-label="Download label as image">⬇</button>
     ${d.brand ? `<img class="nf-logo" data-brand="${esc(d.brand)}" alt="" hidden />` : ''}
     ${d.brand ? `<p class="brand">${esc(d.brand)}</p>` : ''}
     <p class="name">${esc(d.title)}</p>

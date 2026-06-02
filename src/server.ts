@@ -14,7 +14,7 @@ const ORIGIN = process.env.SITE_ORIGIN || 'https://foodland.fyi';
 // Cache-bust client assets per deploy so browsers never run a stale app.js.
 const ASSET_V = Date.now().toString(36);
 const stamp = (html: string) =>
-  html.replace(/(\/(?:app\.js|styles\.css|additives\.js|vendor\/html2canvas\.min\.js))(?=["'])/g, `$1?v=${ASSET_V}`);
+  html.replace(/(\/(?:app\.js|styles\.css|additives\.js))(?=["'])/g, `$1?v=${ASSET_V}`);
 
 app.use(express.static(PUBLIC_DIR, {
   index: false,
