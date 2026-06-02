@@ -198,13 +198,15 @@ function paintLabel(body, d, idx) {
   if (dl) dl.onclick = () => downloadLabel(body, d);
 }
 
-// Rasterize the live FDA label node to a PNG and download it. Captures the
-// on-screen (laid-out) node — cloning off-screen renders blank.
+// Rasterize the live FDA label node to a PNG via html2canvas (reliable; paints
+// straight to a canvas, unlike html-to-image's blank-prone SVG approach).
 async function downloadLabel(body, d) {
   const nf = body.querySelector('.nf');
-  if (!nf || !window.htmlToImage) return;
-  // Temporarily swap the serving dropdown for plain text so the image is clean.
+  if (!nf || !window.html2canvas) return;
+  // Swap the serving dropdown for plain text; hide the macro ring (html2canvas
+  // can't render conic-gradient, so it would draw an empty circle).
   const sel = nf.querySelector('#serving-select');
+  const ring = nf.querySelector('.macros .ring');
   let span = null;
   if (sel) {
     span = document.createElement('span');
@@ -213,17 +215,10 @@ async function downloadLabel(body, d) {
     sel.style.display = 'none';
     sel.insertAdjacentElement('afterend', span);
   }
-  // skipFonts avoids html-to-image hanging while it tries to inline external
-  // stylesheets/fonts; the label uses system fonts (Helvetica/Arial) anyway.
-  const opts = { pixelRatio: 2, backgroundColor: '#ffffff', skipFonts: true, style: { margin: '0' } };
+  if (ring) ring.style.visibility = 'hidden';
   try {
-    // html-to-image's first pass(es) can come out blank in Chrome — render a
-    // few times and keep the last, biggest result.
-    let url = '';
-    for (let i = 0; i < 3; i++) {
-      const u = await window.htmlToImage.toPng(nf, opts);
-      if (u.length >= url.length) url = u;
-    }
+    const canvas = await window.html2canvas(nf, { backgroundColor: '#ffffff', scale: 2, logging: false, useCORS: true });
+    const url = canvas.toDataURL('image/png');
     const a = document.createElement('a');
     a.href = url;
     a.download = (d?.title || 'nutrition-facts').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) + '-nutrition-facts.png';
@@ -233,6 +228,7 @@ async function downloadLabel(body, d) {
   } finally {
     if (span) span.remove();
     if (sel) sel.style.display = '';
+    if (ring) ring.style.visibility = '';
   }
 }
 
