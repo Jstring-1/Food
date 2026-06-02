@@ -274,24 +274,50 @@ function lastCategory(c: string | null): string {
 // First brand only (OFF brands are often comma-duplicated, e.g. "Billa,Billa Premium").
 const firstBrand = (b: string | null) => (b ? String(b).split(',')[0].trim() : '');
 
+// Preferred USDA dataset order when the same food appears in several programs.
+// Foundation/SR Legacy are lab analyses; Survey (FNDDS) is dietary-survey data;
+// branded last. The representative's headline values come from the best source.
+const DATASET_RANK: Record<string, number> = {
+  foundation_food: 0, sr_legacy_food: 1, survey_fndds_food: 2, branded_food: 3,
+};
+const datasetRank = (dt: string) => DATASET_RANK[dt] ?? 4;
+
 function groupUsda(rows: any[]): any[] {
   const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  const map = new Map<string, any>();
+  // Singularize each word so "Banana, raw" and "Bananas, raw" (different USDA
+  // datasets) collapse into one food. Guards short words and "ss" endings.
+  const singular = (s: string) => s.split(' ')
+    .map((w) => (w.length > 3 && w.endsWith('s') && !w.endsWith('ss')) ? w.slice(0, -1) : w)
+    .join(' ');
+
+  const groups = new Map<string, any[]>();
   for (const r of rows) {
-    const key = norm(r.brand) + '|' + norm(r.description);
-    let g = map.get(key);
-    if (!g) {
-      const category = r.food_category || r.branded_food_category || '';
-      g = {
-        source: 'usda', id: String(r.fdc_id), title: r.description, brand: r.brand || '',
-        category, sub: subOf(r.brand, category), dataType: r.data_type,
-        kcal: r.kcal, protein: r.protein, sugars: r.sugars, fat: r.fat, variants: [] as any[],
-      };
-      map.set(key, g);
-    }
-    g.variants.push({ id: String(r.fdc_id), serving: servingText(r) });
+    const key = norm(r.brand) + '|' + singular(norm(r.description));
+    const grp = groups.get(key);
+    if (grp) grp.push(r); else groups.set(key, [r]);
   }
-  return [...map.values()].map((g) => ({ ...g, variantCount: g.variants.length }));
+
+  return [...groups.values()].map((grp) => {
+    grp.sort((a, b) => datasetRank(a.data_type) - datasetRank(b.data_type)); // best dataset first
+    const rep = grp[0];
+    const category = rep.food_category || rep.branded_food_category || '';
+    // One variant per distinct serving (whole foods all share "per 100 g", so
+    // cross-dataset dupes collapse rather than spamming the dropdown).
+    const variants: { id: string; serving: string }[] = [];
+    const seen = new Set<string>();
+    for (const r of grp) {
+      const serving = servingText(r);
+      if (seen.has(serving)) continue;
+      seen.add(serving);
+      variants.push({ id: String(r.fdc_id), serving });
+    }
+    return {
+      source: 'usda', id: String(rep.fdc_id), title: rep.description, brand: rep.brand || '',
+      category, sub: subOf(rep.brand, category), dataType: rep.data_type,
+      kcal: rep.kcal, protein: rep.protein, sugars: rep.sugars, fat: rep.fat,
+      variants, variantCount: variants.length,
+    };
+  });
 }
 
 // Lower score = better. Blends match quality (exact > prefix > word-start >
