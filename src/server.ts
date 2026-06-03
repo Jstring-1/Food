@@ -898,17 +898,28 @@ app.get('/api/recipes', async (req, res) => {
   const sort = String(req.query.sort ?? 'relevance');
   const limit = Math.min(60, Math.max(1, Number(req.query.limit) || 40));
   const offset = Math.min(2000, Math.max(0, Number(req.query.offset) || 0));
+  // A comma in the query switches to ingredient search: each comma-separated
+  // term must appear in the recipe's ingredients (full-text AND match).
+  const ingTerms = q.includes(',') ? q.split(',').map((s) => s.trim()).filter(Boolean) : [];
+  const byIngredient = ingTerms.length > 0;
   try {
     const p: unknown[] = [];
     const where: string[] = [];
-    if (q.length >= 3) { p.push(`%${q}%`); where.push(`title ILIKE $${p.length}`); }
+    if (byIngredient) {
+      p.push(ingTerms.join(' ')); // plainto_tsquery ANDs all the words
+      where.push(`to_tsvector('english', ingredients::text) @@ plainto_tsquery('english', $${p.length})`);
+    } else if (q.length >= 3) {
+      p.push(`%${q}%`); where.push(`title ILIKE $${p.length}`);
+    }
     if (category) { p.push(category); where.push(`category = $${p.length}`); }
     if (source === 'foodcom' || source === 'recipenlg') { p.push(source); where.push(`source = $${p.length}`); }
 
     let orderBy = RECIPE_SORT[sort] || '';
     if (!orderBy) {
-      if (q.length >= 3) { // relevance: prefix match, then shorter (generic) titles,
-        // rating only as a tiebreaker so both sources interleave.
+      if (byIngredient) { // relevance: no title to rank on, so best-rated first
+        orderBy = `rating DESC NULLS LAST, review_count DESC NULLS LAST, title ASC`;
+      } else if (q.length >= 3) { // relevance: prefix match, then shorter (generic)
+        // titles, rating only as a tiebreaker so both sources interleave.
         p.push(`${q}%`);
         orderBy = `(title ILIKE $${p.length}) DESC, length(title) ASC, rating DESC NULLS LAST, title ASC`;
       } else { // category browse with no query: best-rated first

@@ -182,3 +182,6 @@ ALTER TABLE recipe ADD COLUMN IF NOT EXISTS fiber_g        DOUBLE PRECISION;
 CREATE INDEX IF NOT EXISTS recipe_title_trgm ON recipe USING gin (title gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS recipe_source_idx ON recipe (source);
 CREATE INDEX IF NOT EXISTS recipe_rating_idx ON recipe (rating);
+-- Ingredient full-text search (comma-separated ingredient queries). The
+-- expression must match the query: to_tsvector('english', ingredients::text).
+CREATE INDEX IF NOT EXISTS recipe_ing_fts ON recipe USING gin (to_tsvector('english', ingredients::text));
