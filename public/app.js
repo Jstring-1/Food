@@ -438,8 +438,9 @@ async function renderInto(source, id) {
   const r = await fetch(`/api/food?source=${source}&id=${encodeURIComponent(id)}`);
   if (!r.ok) { body.innerHTML = '<p class="meta">Could not load.</p>'; return; }
   const d = await r.json();
-  const idx = Math.max(0, (d.servings || []).findIndex((s) => s.grams === 100));
-  paintLabel(body, d, idx);
+  // Default to the product's own serving (server lists it first for branded
+  // foods with known grams); otherwise the first option is 100 g.
+  paintLabel(body, d, 0);
 }
 
 // Render the label at serving index `idx`, wiring the serving dropdown to
