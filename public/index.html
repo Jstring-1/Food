@@ -25,9 +25,33 @@
 
   <main>
     <section class="search">
+      <div class="mode-tabs" role="tablist">
+        <button type="button" id="tab-food" class="mode-tab active" role="tab" aria-selected="true">Nutrition</button>
+        <button type="button" id="tab-recipe" class="mode-tab" role="tab" aria-selected="false">Recipes</button>
+      </div>
+
       <input id="q" type="search" placeholder="Search foods or scan a barcode — e.g. cheddar, banana, 884853601023…" autofocus />
 
-      <div class="filters">
+      <div class="filters" id="recipe-filters" hidden>
+        <label>Source
+          <select id="r-source">
+            <option value="all">All</option>
+            <option value="foodcom">Food.com</option>
+            <option value="recipenlg">RecipeNLG</option>
+          </select>
+        </label>
+        <label>Sort
+          <select id="r-sort">
+            <option value="relevance">Relevance</option>
+            <option value="rating">Top rated</option>
+            <option value="quick">Quickest</option>
+            <option value="calories_asc">Calories ↑</option>
+            <option value="calories_desc">Calories ↓</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="filters" id="food-filters">
         <label>Source
           <select id="f-source">
             <option value="all">All</option>
@@ -68,6 +92,10 @@
 
     <section id="label-panel" class="label-panel" hidden>
       <div id="label"></div>
+    </section>
+
+    <section id="recipe-panel" class="recipe-panel" hidden>
+      <div id="recipe"></div>
     </section>
   </main>
 

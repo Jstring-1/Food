@@ -95,7 +95,112 @@ document.querySelectorAll('.filters select, .filters input').forEach((el) => {
   el.addEventListener('change', () => { if (el.id === 'f-source') syncFilterVisibility(); search(); });
 });
 
-async function search() {
+// ── Mode: nutrition search vs recipe search ────────────────────────────────
+let mode = 'food';
+const recipePanel = document.getElementById('recipe-panel');
+const recipeEl = document.getElementById('recipe');
+
+function setMode(m) {
+  if (m === mode) return;
+  mode = m;
+  document.getElementById('tab-food').classList.toggle('active', m === 'food');
+  document.getElementById('tab-recipe').classList.toggle('active', m === 'recipe');
+  document.getElementById('tab-food').setAttribute('aria-selected', m === 'food');
+  document.getElementById('tab-recipe').setAttribute('aria-selected', m === 'recipe');
+  document.getElementById('food-filters').hidden = m !== 'food';
+  document.getElementById('recipe-filters').hidden = m !== 'recipe';
+  panelEl.hidden = true; recipePanel.hidden = true; // close any open detail
+  resultsEl.innerHTML = '';
+  qEl.placeholder = m === 'recipe'
+    ? 'Search recipes — e.g. chicken curry, banana bread, lasagna…'
+    : 'Search foods or scan a barcode — e.g. cheddar, banana, 884853601023…';
+  search();
+}
+document.getElementById('tab-food').addEventListener('click', () => setMode('food'));
+document.getElementById('tab-recipe').addEventListener('click', () => setMode('recipe'));
+
+async function searchRecipes() {
+  const v = qEl.value.trim();
+  if (v.length < 3) { resultsEl.innerHTML = ''; return; }
+  const p = new URLSearchParams({ q: v, source: $('r-source').value, sort: $('r-sort').value });
+  const r = await fetch('/api/recipes?' + p.toString());
+  if (!r.ok) { resultsEl.innerHTML = '<div class="empty">…</div>'; return; }
+  const { results } = await r.json();
+  if (!results.length) { resultsEl.innerHTML = '<div class="empty">No recipes found.</div>'; return; }
+  resultsEl.innerHTML = '';
+  for (const it of results) {
+    const a = document.createElement('a');
+    a.className = 'result';
+    a.href = it.source_url || '#';
+    const meta = [
+      it.rating != null ? `★ ${(+it.rating).toFixed(1)}${it.review_count ? ` (${it.review_count})` : ''}` : '',
+      it.minutes != null ? `${it.minutes} min` : '',
+      it.calories != null ? `${Math.round(it.calories)} kcal/serv` : '',
+      it.n_ingredients != null ? `${it.n_ingredients} ingredients` : '',
+    ].filter(Boolean).join(' · ');
+    a.innerHTML =
+      `<span class="result-main">` +
+        `<span class="badge recipe">${it.source === 'foodcom' ? 'Food.com' : 'RecipeNLG'}</span>` +
+        `<span class="title">${esc(it.title)}</span>` +
+        `<div class="sub">${esc(meta)}</div>` +
+      `</span>`;
+    a.onclick = (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+      e.preventDefault();
+      showRecipe(it.id);
+    };
+    resultsEl.appendChild(a);
+  }
+}
+
+async function showRecipe(id) {
+  recipePanel.hidden = false;
+  recipeEl.innerHTML = '<p class="meta">loading…</p>';
+  const r = await fetch('/api/recipe?id=' + encodeURIComponent(id));
+  if (!r.ok) { recipeEl.innerHTML = '<p class="meta">Could not load.</p>'; return; }
+  recipeEl.innerHTML = renderRecipe(await r.json());
+  recipeEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderRecipe(d) {
+  const ing = (d.ingredients || []).map((x) => `<li>${esc(x)}</li>`).join('');
+  const steps = (d.steps || []).map((x) => `<li>${esc(x)}</li>`).join('');
+  const tags = (d.tags || []).slice(0, 16).map((x) => `<span class="r-tag">${esc(x)}</span>`).join('');
+  const meta = [
+    d.rating != null ? `★ ${(+d.rating).toFixed(1)}${d.review_count ? ` (${d.review_count} reviews)` : ''}` : '',
+    d.minutes != null ? `${d.minutes} min` : '',
+  ].filter(Boolean).join(' · ');
+  // Per-serving nutrition card (Food.com only).
+  let nutri = '';
+  if (d.calories != null) {
+    const rows = [
+      ['Calories', d.calories, '', 0], ['Fat', d.fat_g, 'g', 1], ['Saturated Fat', d.sat_fat_g, 'g', 1],
+      ['Carbs', d.carbs_g, 'g', 1], ['Sugar', d.sugar_g, 'g', 1], ['Protein', d.protein_g, 'g', 1],
+      ['Sodium', d.sodium_mg, 'mg', 0],
+    ].filter(([, v]) => v != null)
+      .map(([l, v, u, dp]) => `<tr><td>${l}</td><td>${(+v).toFixed(dp)}${u}</td></tr>`).join('');
+    nutri = `<div class="r-nutri"><h3>Nutrition <span>per serving</span></h3><table>${rows}</table></div>`;
+  }
+  const srcName = d.source === 'foodcom' ? 'Food.com' : 'RecipeNLG';
+  const srcLink = d.source_url
+    ? `<a href="${esc(d.source_url)}" target="_blank" rel="noopener">View original on ${srcName} ↗</a>` : '';
+  return `
+    <button type="button" class="r-close" onclick="document.getElementById('recipe-panel').hidden=true">✕</button>
+    <h1 class="r-title">${esc(d.title)}</h1>
+    ${meta ? `<p class="r-meta">${esc(meta)}</p>` : ''}
+    ${d.description ? `<p class="r-desc">${esc(d.description)}</p>` : ''}
+    ${tags ? `<div class="r-tags">${tags}</div>` : ''}
+    ${nutri}
+    <div class="r-cols">
+      <div class="r-ing"><h3>Ingredients${d.n_ingredients ? ` (${d.n_ingredients})` : ''}</h3><ul>${ing || '<li class="meta">Not listed.</li>'}</ul></div>
+      <div class="r-steps"><h3>Directions</h3><ol>${steps || '<li class="meta">Not listed.</li>'}</ol></div>
+    </div>
+    <p class="r-src">${srcLink} <span class="meta">· Recipe content belongs to its source; shown here with attribution.</span></p>`;
+}
+
+function search() { return mode === 'recipe' ? searchRecipes() : searchFood(); }
+
+async function searchFood() {
   const v = qEl.value.trim();
   if (!isBarcode(v) && v.length < 3) { resultsEl.innerHTML = ''; return; }
   const r = await fetch('/api/search?' + readFilters(v).toString());

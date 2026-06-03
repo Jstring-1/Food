@@ -627,6 +627,56 @@ app.get('/api/food', async (req, res) => {
   }
 });
 
+// ── Recipes ────────────────────────────────────────────────────────────────
+const RECIPE_SORT: Record<string, string> = {
+  relevance: '',
+  rating: 'rating DESC NULLS LAST, review_count DESC NULLS LAST',
+  quick: 'minutes ASC NULLS LAST',
+  calories_asc: 'calories ASC NULLS LAST',
+  calories_desc: 'calories DESC NULLS LAST',
+};
+
+app.get('/api/recipes', async (req, res) => {
+  const q = String(req.query.q ?? '').trim();
+  if (q.length < 3) return void res.json({ results: [] });
+  const source = String(req.query.source ?? 'all');
+  const sort = String(req.query.sort ?? 'relevance');
+  try {
+    const p: unknown[] = [`%${q}%`];
+    const where = ['title ILIKE $1'];
+    if (source === 'foodcom' || source === 'recipenlg') { p.push(source); where.push(`source = $${p.length}`); }
+
+    let orderBy = RECIPE_SORT[sort] || '';
+    if (!orderBy) { // relevance: prefix match, then rated/popular, then shorter titles
+      p.push(`${q}%`);
+      orderBy = `(title ILIKE $${p.length}) DESC, (rating IS NOT NULL) DESC,
+        rating DESC NULLS LAST, length(title) ASC, title ASC`;
+    }
+    const r = await pool.query(
+      `SELECT id, source, title, minutes, n_ingredients, rating, review_count, calories, source_url
+         FROM recipe WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT 40`, p);
+    res.json({ results: r.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'query failed', detail: String(err) });
+  }
+});
+
+app.get('/api/recipe', async (req, res) => {
+  const id = Number(req.query.id);
+  if (!Number.isFinite(id)) return void res.status(400).json({ error: 'id required' });
+  try {
+    const r = await pool.query(
+      `SELECT id, source, source_id, title, ingredients, steps, tags, minutes, n_ingredients,
+              source_url, description, rating, review_count,
+              calories, fat_g, sat_fat_g, sugar_g, sodium_mg, protein_g, carbs_g
+         FROM recipe WHERE id = $1`, [id]);
+    if (!r.rowCount) return void res.status(404).json({ error: 'not found' });
+    res.json(r.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'lookup failed', detail: String(err) });
+  }
+});
+
 // ── Server-rendered food pages (permalinks + SEO) ──────────────────────────
 const MACRO_ROWS: [string, string, string][] = [
   ['Calories', 'energyKcal', 'kcal'], ['Total Fat', 'fat', 'g'], ['Saturated Fat', 'satFat', 'g'],

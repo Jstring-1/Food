@@ -35,3 +35,32 @@ export async function end(stream: Writable): Promise<void> {
   stream.end();
   await finished(stream);
 }
+
+// Parse a list-of-strings cell. RecipeNLG stores valid JSON arrays; Food.com
+// stores Python list reprs (single quotes, apostrophes inside). Try JSON first,
+// then fall back to a quote-aware tokenizer that handles both quote styles and
+// backslash escapes.
+export function parseList(s: string | undefined | null): string[] {
+  if (!s) return [];
+  const t = s.trim();
+  if (!t || t === '[]') return [];
+  try {
+    const j = JSON.parse(t);
+    if (Array.isArray(j)) return j.map((x) => String(x));
+  } catch { /* fall through to Python-list tokenizer */ }
+  const out: string[] = [];
+  let cur = '';
+  let q: string | null = null; // current quote char, or null when outside a string
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (q) {
+      if (c === '\\' && i + 1 < t.length) { cur += t[++i]; continue; }
+      if (c === q) { out.push(cur); cur = ''; q = null; continue; }
+      cur += c;
+    } else if (c === '"' || c === "'") {
+      q = c;
+    }
+    // chars outside strings ([ ] , whitespace) are ignored
+  }
+  return out;
+}

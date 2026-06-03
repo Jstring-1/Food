@@ -139,3 +139,37 @@ CREATE TABLE IF NOT EXISTS gi_values (
   source    TEXT,
   keywords  TEXT[] NOT NULL          -- all must appear in a food's description to match
 );
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- Recipes. Two free bulk datasets, loaded like the food tables:
+--   foodcom   — Food.com / Kaggle (~230k, includes per-serving nutrition)
+--   recipenlg — RecipeNLG (~2.2M, breadth; no nutrition)
+-- Each row links back to its source recipe (attribution; we don't claim it).
+-- ──────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS recipe (
+  id            BIGSERIAL PRIMARY KEY,
+  source        TEXT NOT NULL,           -- 'foodcom' | 'recipenlg'
+  source_id     TEXT,                    -- original id / row index
+  title         TEXT NOT NULL,
+  ingredients   JSONB,                   -- ["1 cup flour", ...]
+  steps         JSONB,                   -- ["Preheat...", "Mix...", ...]
+  tags          JSONB,                   -- ["dessert","easy", ...]
+  minutes       INTEGER,                 -- prep+cook time (foodcom)
+  n_ingredients INTEGER,
+  source_url    TEXT,                    -- link back to the original recipe
+  description   TEXT,
+  rating        DOUBLE PRECISION,        -- avg user rating (foodcom interactions)
+  review_count  INTEGER,
+  -- Per-serving nutrition (foodcom; converted from its %DV array). NULL for nlg.
+  calories      DOUBLE PRECISION,
+  fat_g         DOUBLE PRECISION,
+  sat_fat_g     DOUBLE PRECISION,
+  sugar_g       DOUBLE PRECISION,
+  sodium_mg     DOUBLE PRECISION,
+  protein_g     DOUBLE PRECISION,
+  carbs_g       DOUBLE PRECISION
+);
+
+CREATE INDEX IF NOT EXISTS recipe_title_trgm ON recipe USING gin (title gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS recipe_source_idx ON recipe (source);
+CREATE INDEX IF NOT EXISTS recipe_rating_idx ON recipe (rating);

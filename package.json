@@ -13,6 +13,8 @@
     "ingest:fdc": "tsx src/ingest/fdc.ts",
     "ingest:off": "tsx src/ingest/off.ts",
     "ingest:gi": "tsx src/ingest/gi.ts",
+    "ingest:recipes:foodcom": "tsx src/ingest/recipes-foodcom.ts",
+    "ingest:recipes:nlg": "tsx src/ingest/recipes-nlg.ts",
     "dedupe:fdc": "tsx src/maintenance/dedupe-fdc.ts",
     "denormalize:fdc": "tsx src/maintenance/run-denormalize.ts",
     "warm:logos": "tsx src/maintenance/warm-logos.ts",
