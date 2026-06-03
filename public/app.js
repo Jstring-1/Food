@@ -524,7 +524,7 @@ function renderLabel(d, idx = 0) {
       ${row('', 'Total Carbohydrate', 'carbs', n, { bold: true })}
       ${row('ind', 'Dietary Fiber', 'fiber', n)}
       ${netRow}
-      ${n.sugars != null ? `<tr><td class="ind">Total Sugars ${fmt(n.sugars, 'g')}</td><td class="dv"></td></tr>` : ''}
+      ${n.sugars != null ? `<tr><td class="ind sugar-line" role="button" tabindex="0" data-sugar="${(+n.sugars).toFixed(2)}" data-grams="${grams}">Total Sugars ${fmt(n.sugars, 'g')}</td><td class="dv"></td></tr>` : ''}
       ${added}
       <tr class="thick">${`<td><b>Protein</b>${n.protein == null ? '' : ' ' + fmt(n.protein, 'g')}</td><td class="dv"></td>`}</tr>
       ${micros}
@@ -535,8 +535,7 @@ function renderLabel(d, idx = 0) {
     ${d.allergens && d.allergens.length ? `<p class="nf-allergens"><b>Allergens:</b> ${d.allergens.map(esc).join(', ')}</p>` : ''}
     ${d.diet && d.diet.length ? `<p class="nf-diet">${d.diet.map((x) => `<span class="diet-badge">${esc(x)}</span>`).join('')}</p>` : ''}
     ${ingredientsHtml(d.ingredients)}
-  </div>
-  ${sugarViz(n.sugars)}`;
+  </div>`;
 }
 
 // Extended nutrients (USDA whole foods), rendered inside the label as one
@@ -569,17 +568,13 @@ function glyChips(n, d) {
     + `</div>`;
 }
 
-// Visualize sugar as ~4 g sugar cubes for the current serving. Clickable —
-// opens a popup with everyday sugar equivalents (see openSugarInfo).
-function sugarViz(sugars) {
-  if (sugars == null || sugars <= 0) return '';
+// Render ~4 g sugar cubes for a sugar amount (used inside the sugar popup).
+function sugarCubes(sugars) {
   const count = Math.round(sugars / 4);
   const shown = Math.min(Math.max(count, 1), 40);
   const icons = Array.from({ length: shown }, () => '<span class="cube"></span>').join('');
   const more = count > shown ? `<span class="cube-more">+${count - shown}</span>` : '';
-  const label = count >= 1 ? `${count} sugar cube${count === 1 ? '' : 's'}` : 'under 1 sugar cube';
-  const cap = `≈ ${label} · ${(+sugars).toFixed(1)} g sugar — tap for details`;
-  return `<div class="sugar-cubes" role="button" tabindex="0" data-sugar="${(+sugars).toFixed(2)}" aria-label="${cap}">${icons}${more}</div>`;
+  return `<div class="sugar-cubes">${icons}${more}</div>`;
 }
 
 // Ingredients line with flagged-additive warnings (hover for details).
@@ -684,11 +679,13 @@ const SUGAR_REFS = [
 ];
 function fmtRatio(n) { return n >= 10 ? Math.round(n) : +n.toFixed(1); }
 
-function openSugarInfo(grams) {
+function openSugarInfo(grams, servingGrams) {
   const g = +grams;
   if (!(g > 0)) return;
   const cubes = Math.round(g / 4);
   const snick = fmtRatio(g / 27);
+  const sg = +servingGrams;
+  const pct = sg > 0 ? Math.round((g / sg) * 100) : null;
   const others = SUGAR_REFS.filter((r) => r.g !== 27)
     .map((r) => ({ r, v: fmtRatio(g / r.g) }))
     .filter((x) => x.v >= 0.1);
@@ -696,6 +693,8 @@ function openSugarInfo(grams) {
     <div class="sugar-pop">
       <h2>Sugar <span class="sugar-amt">${g.toFixed(1)} g</span></h2>
       <p class="sugar-cube-line">≈ ${cubes} sugar cube${cubes === 1 ? '' : 's'} (1 cube ≈ 4 g)</p>
+      ${sugarCubes(g)}
+      ${pct != null ? `<p class="sugar-pct"><b>${pct}%</b> of this serving is sugar by weight.</p>` : ''}
       <p class="sugar-lead">This serving has about the same sugar as
         <b>${snick} ${snick === 1 ? 'regular Snickers bar' : 'regular Snickers bars'}</b>.</p>
       <p class="sugar-eq-head"><b>Other everyday equivalents</b></p>
@@ -712,15 +711,15 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest) return;
   const add = e.target.closest('.additive-warn');
   if (add) { e.preventDefault(); openAdditiveInfo(add.dataset.term); return; }
-  const sug = e.target.closest('.sugar-cubes');
-  if (sug) { e.preventDefault(); openSugarInfo(sug.dataset.sugar); }
+  const sug = e.target.closest('.sugar-line');
+  if (sug) { e.preventDefault(); openSugarInfo(sug.dataset.sugar, sug.dataset.grams); }
 });
 document.addEventListener('keydown', (e) => {
   if ((e.key !== 'Enter' && e.key !== ' ') || !e.target.closest) return;
   const add = e.target.closest('.additive-warn');
   if (add) { e.preventDefault(); openAdditiveInfo(add.dataset.term); return; }
-  const sug = e.target.closest('.sugar-cubes');
-  if (sug) { e.preventDefault(); openSugarInfo(sug.dataset.sugar); }
+  const sug = e.target.closest('.sugar-line');
+  if (sug) { e.preventDefault(); openSugarInfo(sug.dataset.sugar, sug.dataset.grams); }
 });
 document.querySelectorAll('footer a[href="/leaders"], footer a[href="/developers"]').forEach((a) => {
   a.onclick = (e) => { e.preventDefault(); openInfo(a.getAttribute('href')); };
