@@ -90,16 +90,30 @@ function syncFilterVisibility() {
   document.querySelectorAll('[data-when="not-usda"]').forEach((el) => (el.style.display = s === 'usda' ? 'none' : ''));
 }
 
-// Each page has its own debounced input + live filters; state persists because
-// switching pages only shows/hides them (nothing is cleared).
-let foodTimer, recipeTimer;
-foodQ.addEventListener('input', () => { clearTimeout(foodTimer); foodTimer = setTimeout(searchFood, 250); });
-recipeQ.addEventListener('input', () => { clearTimeout(recipeTimer); recipeTimer = setTimeout(searchRecipes, 250); });
+// Search fires on submit, not on every keystroke: Enter, or leaving the field
+// (blur covers clicking elsewhere and Tab). This avoids slow partial-term
+// queries. Blur only re-runs when the text changed; Enter always runs. Filter
+// changes always re-run. State persists because switching pages only hides them.
+let lastFoodQ = null, lastRecipeQ = null;
+function triggerFood(force) {
+  const v = foodQ.value.trim();
+  if (!force && v === lastFoodQ) return;
+  lastFoodQ = v; searchFood();
+}
+function triggerRecipe(force) {
+  const v = recipeQ.value.trim();
+  if (!force && v === lastRecipeQ) return;
+  lastRecipeQ = v; searchRecipes();
+}
+foodQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); triggerFood(true); } });
+foodQ.addEventListener('blur', () => triggerFood(false));
+recipeQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); triggerRecipe(true); } });
+recipeQ.addEventListener('blur', () => triggerRecipe(false));
 document.querySelectorAll('#food-filters select, #food-filters input').forEach((el) => {
-  el.addEventListener('change', () => { if (el.id === 'f-source') syncFilterVisibility(); searchFood(); });
+  el.addEventListener('change', () => { if (el.id === 'f-source') syncFilterVisibility(); triggerFood(true); });
 });
 document.querySelectorAll('#recipe-filters select').forEach((el) => {
-  el.addEventListener('change', searchRecipes);
+  el.addEventListener('change', () => triggerRecipe(true));
 });
 
 // ── Top nav + URL state ────────────────────────────────────────────────────
