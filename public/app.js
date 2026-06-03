@@ -176,7 +176,8 @@ document.getElementById('label-close').addEventListener('click', () => closeLabe
 // Back/forward: re-sync the UI to the URL without pushing a new entry.
 window.addEventListener('popstate', () => applyPath(location.pathname));
 function applyPath(path) {
-  if (path === '/spices') { showPage('recipe', false); openCuisineSpices(false); return; }
+  if (path === '/spices') { showPage('recipe', false); openSpices('cuisine', false); return; }
+  if (path === '/spices/dishes') { showPage('recipe', false); openSpices('dish', false); return; }
   infoModal.hidden = true; // navigating anywhere else closes the spices popup
   const rec = path.match(/^\/recipe\/(\d+)$/);
   const food = path.match(/^\/food\/([^/]+)\/(.+)$/);
@@ -634,8 +635,8 @@ function wireInfoLinks() {
 
 function closeInfoModal() {
   infoModal.hidden = true;
-  // The spices popup owns /spices; closing it returns to the page underneath.
-  if (location.pathname === '/spices') { history.pushState({}, '', recipeUrl); applyTitle(); }
+  // The spices popups own /spices*; closing returns to the page underneath.
+  if (location.pathname.startsWith('/spices')) { history.pushState({}, '', recipeUrl); applyTitle(); }
 }
 document.getElementById('info-close').onclick = closeInfoModal;
 infoModal.onclick = (e) => { if (e.target === infoModal) closeInfoModal(); };
@@ -704,28 +705,33 @@ function openSugarInfo(grams, servingGrams) {
   infoContent.scrollTop = 0;
 }
 
-// ── Top spices by cuisine popup (Food.com cuisine categories). Has its own
-// URL (/spices) so it can be linked and reopened on load.
-const SPICE_TITLE = 'Top spices by cuisine — FoodLand.fyi';
-let SPICE_DATA = null;
-async function openCuisineSpices(push = true) {
-  // Assert /spices as the URL. push=true for a fresh open; replace when arriving
-  // via popstate/hydration (showPage already reset the URL to the page base).
-  if (location.pathname !== '/spices') history[push ? 'pushState' : 'replaceState']({}, '', '/spices');
-  document.title = SPICE_TITLE;
+// ── Top spices popups (by cuisine / by dish). Each has its own URL so it can be
+// linked and reopened on load.
+const SPICE_MODES = {
+  cuisine: { url: '/spices', api: '/api/cuisine-spices', heading: 'Top spices by cuisine' },
+  dish: { url: '/spices/dishes', api: '/api/dish-spices', heading: 'Top spices by dish' },
+};
+const SPICE_DATA = {};
+async function openSpices(mode, push = true) {
+  const m = SPICE_MODES[mode];
+  if (!m) return;
+  // Assert the mode URL. push=true for a fresh open; replace when arriving via
+  // popstate/hydration (showPage already reset the URL to the page base).
+  if (location.pathname !== m.url) history[push ? 'pushState' : 'replaceState']({}, '', m.url);
+  document.title = `${m.heading} — FoodLand.fyi`;
   infoModal.hidden = false;
   infoContent.innerHTML = '<p class="meta" style="padding:1rem">Loading…</p>';
   infoContent.scrollTop = 0;
   try {
-    if (!SPICE_DATA) SPICE_DATA = await (await fetch('/api/cuisine-spices')).json();
-    const cards = (SPICE_DATA.cuisines || []).map((c) => `
+    if (!SPICE_DATA[mode]) SPICE_DATA[mode] = await (await fetch(m.api)).json();
+    const cards = (SPICE_DATA[mode].groups || []).map((g) => `
       <div class="cuisine-card">
-        <h3>${esc(c.cuisine)} <span class="cuisine-n">${c.recipes.toLocaleString()} recipes</span></h3>
-        <ul>${c.spices.map((s) => `<li><span class="spice-name">${esc(s.name)}</span><span class="spice-bar"><span style="width:${s.pct}%"></span></span><span class="spice-pct">${s.pct}%</span></li>`).join('')}</ul>
+        <h3>${esc(g.name)} <span class="cuisine-n">${g.recipes.toLocaleString()} recipes</span></h3>
+        <ul>${g.spices.map((s) => `<li><span class="spice-name">${esc(s.name)}</span><span class="spice-bar"><span style="width:${s.pct}%"></span></span><span class="spice-pct">${s.pct}%</span></li>`).join('')}</ul>
       </div>`).join('');
     infoContent.innerHTML = `
       <div class="spice-pop">
-        <h2>Top spices by cuisine</h2>
+        <h2>${m.heading}</h2>
         <div class="cuisine-grid">${cards || '<p class="meta">No data.</p>'}</div>
       </div>`;
     infoContent.scrollTop = 0;
@@ -733,7 +739,8 @@ async function openCuisineSpices(push = true) {
     infoContent.innerHTML = '<p class="meta" style="padding:1rem">Could not load.</p>';
   }
 }
-$('spice-btn')?.addEventListener('click', () => openCuisineSpices());
+$('spice-btn')?.addEventListener('click', () => openSpices('cuisine'));
+$('dish-btn')?.addEventListener('click', () => openSpices('dish'));
 
 document.addEventListener('click', (e) => {
   if (!e.target.closest) return;
@@ -770,5 +777,8 @@ if (window.__FOOD__) {
   showPage('recipe', false);
 } else if (location.pathname === '/spices') {
   showPage('recipe', false);
-  openCuisineSpices(false);
+  openSpices('cuisine', false);
+} else if (location.pathname === '/spices/dishes') {
+  showPage('recipe', false);
+  openSpices('dish', false);
 }

@@ -25,8 +25,9 @@ app.get('/', (_req, res) => res.type('html').set('Cache-Control', 'no-cache').se
 app.get('/favicon.ico', (_req, res) => res.redirect(301, '/favicon.svg'));
 // Recipe-page base URL (SPA shows the recipe page; direct visits/refresh work).
 app.get('/recipes', (_req, res) => res.type('html').set('Cache-Control', 'no-cache').send(stamp(SHELL)));
-// Spices-by-cuisine popup URL (SPA opens the popup over the recipe page).
+// Spices popup URLs (SPA opens the popup over the recipe page).
 app.get('/spices', (_req, res) => res.type('html').set('Cache-Control', 'no-cache').send(stamp(SHELL)));
+app.get('/spices/dishes', (_req, res) => res.type('html').set('Cache-Control', 'no-cache').send(stamp(SHELL)));
 
 function escHtml(s: unknown): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
@@ -746,7 +747,7 @@ const SPICE_VOCAB: { label: string; terms: string[]; not?: string[] }[] = [
   { label: 'Basil', terms: ['basil'] },
   { label: 'Thyme', terms: ['thyme'] },
   { label: 'Rosemary', terms: ['rosemary'] },
-  { label: 'Sage', terms: ['sage'] },
+  { label: 'Sage', terms: ['sage'], not: ['sausage'] },
   { label: 'Parsley', terms: ['parsley'] },
   { label: 'Dill', terms: ['dill'] },
   { label: 'Mint', terms: ['mint'], not: ['peppermint extract'] },
@@ -782,19 +783,57 @@ function isDessertTitle(title: string): boolean {
   return false;
 }
 
-let SPICE_CACHE: { t: number; data: any } | null = null;
+// Tally each spice's recipe-occurrence into `cmap` for one recipe's ingredients.
+function tallySpices(cmap: Map<string, number>, lines: string[]): void {
+  for (const sp of SPICE_VOCAB) {
+    const hit = lines.some((l) => sp.terms.some((t) => l.includes(t)) && !(sp.not || []).some((n) => l.includes(n)));
+    if (hit) cmap.set(sp.label, (cmap.get(sp.label) || 0) + 1);
+  }
+}
+// Top 15 spices for a group as { name, pct } where pct is share of its recipes.
+function topSpices(cmap: Map<string, number>, total: number): { name: string; pct: number }[] {
+  return [...cmap.entries()]
+    .map(([name, n]) => ({ name, pct: Math.round((n / Math.max(total, 1)) * 100) }))
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, 15);
+}
+
+// Popular dish types, matched by title (ILIKE patterns), for the dish view.
+const DISHES: { label: string; patterns: string[] }[] = [
+  { label: 'Chili', patterns: ['%chili%', '%chilli%'] },
+  { label: 'Curry', patterns: ['%curry%'] },
+  { label: 'Soup', patterns: ['%soup%'] },
+  { label: 'Stew', patterns: ['%stew%'] },
+  { label: 'Stir-fry', patterns: ['%stir fry%', '%stir-fry%', '%stirfry%'] },
+  { label: 'Fried rice', patterns: ['%fried rice%'] },
+  { label: 'Tacos', patterns: ['%taco%'] },
+  { label: 'Salsa', patterns: ['%salsa%'] },
+  { label: 'Gumbo', patterns: ['%gumbo%'] },
+  { label: 'Jambalaya', patterns: ['%jambalaya%'] },
+  { label: 'Meatballs', patterns: ['%meatball%'] },
+  { label: 'Meatloaf', patterns: ['%meatloaf%', '%meat loaf%'] },
+  { label: 'BBQ', patterns: ['%barbecue%', '%barbeque%', '%bbq%'] },
+  { label: 'Chicken wings', patterns: ['%wings%'] },
+  { label: 'Marinade', patterns: ['%marinade%', '%marinate%'] },
+  { label: 'Hummus', patterns: ['%hummus%'] },
+];
+
+// Generic spice-group cache (6h) keyed by view.
+const SPICE_CACHE: Record<string, { t: number; data: any }> = {};
+const SPICE_TTL = 6 * 60 * 60 * 1000;
+
 app.get('/api/cuisine-spices', async (_req, res) => {
-  if (SPICE_CACHE && Date.now() - SPICE_CACHE.t < 6 * 60 * 60 * 1000) {
-    return void res.json(SPICE_CACHE.data);
+  if (SPICE_CACHE.cuisine && Date.now() - SPICE_CACHE.cuisine.t < SPICE_TTL) {
+    return void res.json(SPICE_CACHE.cuisine.data);
   }
   try {
     const cats = CUISINES.map((c) => c.cat);
     const r = await pool.query(
       `SELECT category, title, ingredients FROM recipe WHERE category = ANY($1) AND ingredients IS NOT NULL`,
       [cats]);
-    // Tally, per cuisine, how many recipes use each spice. Dessert/sweet recipes
-    // are excluded so baking spices (cinnamon, vanilla, nutmeg) don't skew the
-    // savory profile — detected by title, since cuisine is the only category.
+    // Per cuisine, tally spice usage. Dessert/sweet recipes are excluded so
+    // baking spices (cinnamon, vanilla, nutmeg) don't skew the savory profile —
+    // detected by title, since cuisine is the only category a recipe carries.
     const totals = new Map<string, number>();
     const counts = new Map<string, Map<string, number>>();
     for (const c of cats) { totals.set(c, 0); counts.set(c, new Map()); }
@@ -804,26 +843,47 @@ app.get('/api/cuisine-spices', async (_req, res) => {
       const lines: string[] = (row.ingredients || []).map((x: unknown) => String(x).toLowerCase());
       if (!lines.length) continue;
       totals.set(cat, (totals.get(cat) || 0) + 1);
-      const cmap = counts.get(cat)!;
-      for (const sp of SPICE_VOCAB) {
-        const hit = lines.some((l) => sp.terms.some((t) => l.includes(t)) && !(sp.not || []).some((n) => l.includes(n)));
-        if (hit) cmap.set(sp.label, (cmap.get(sp.label) || 0) + 1);
-      }
+      tallySpices(counts.get(cat)!, lines);
     }
-    const cuisines = CUISINES.map(({ cat, label }) => {
+    const groups = CUISINES.map(({ cat, label }) => {
       const total = totals.get(cat) || 0;
-      const spices = [...(counts.get(cat) || new Map()).entries()]
-        .map(([name, n]) => ({ name, pct: Math.round((n / Math.max(total, 1)) * 100) }))
-        .sort((a, b) => b.pct - a.pct)
-        .slice(0, 15);
-      return { cuisine: label, recipes: total, spices };
-    }).filter((c) => c.recipes >= 20)
-      .sort((a, b) => b.recipes - a.recipes);
-    const data = { cuisines };
-    SPICE_CACHE = { t: Date.now(), data };
+      return { name: label, recipes: total, spices: topSpices(counts.get(cat) || new Map(), total) };
+    }).filter((g) => g.recipes >= 20).sort((a, b) => b.recipes - a.recipes);
+    const data = { groups };
+    SPICE_CACHE.cuisine = { t: Date.now(), data };
     res.json(data);
   } catch {
-    res.json({ cuisines: [] });
+    res.json({ groups: [] });
+  }
+});
+
+app.get('/api/dish-spices', async (_req, res) => {
+  if (SPICE_CACHE.dish && Date.now() - SPICE_CACHE.dish.t < SPICE_TTL) {
+    return void res.json(SPICE_CACHE.dish.data);
+  }
+  try {
+    const groups: { name: string; recipes: number; spices: any }[] = [];
+    for (const d of DISHES) {
+      // Sample up to 5k matching recipes per dish — plenty for stable shares.
+      const r = await pool.query(
+        `SELECT ingredients FROM recipe WHERE title ILIKE ANY($1) AND ingredients IS NOT NULL LIMIT 5000`,
+        [d.patterns]);
+      const cmap = new Map<string, number>();
+      let total = 0;
+      for (const row of r.rows) {
+        const lines: string[] = (row.ingredients || []).map((x: unknown) => String(x).toLowerCase());
+        if (!lines.length) continue;
+        total++;
+        tallySpices(cmap, lines);
+      }
+      if (total >= 20) groups.push({ name: d.label, recipes: total, spices: topSpices(cmap, total) });
+    }
+    groups.sort((a, b) => b.recipes - a.recipes);
+    const data = { groups };
+    SPICE_CACHE.dish = { t: Date.now(), data };
+    res.json(data);
+  } catch {
+    res.json({ groups: [] });
   }
 });
 
