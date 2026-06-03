@@ -245,9 +245,21 @@ function paintRecipe(d) {
   if (close) close.onclick = () => closeRecipe();
 }
 
+// RecipeNLG stripped the "/" from fractions ("1/2"->"12", "2/3"->"23",
+// "1 1/2"->"1 12"). Restore known cooking fractions: a whole+fraction pair, and
+// a standalone fraction only before a small unit (so "1 (14 ounce) can" is safe).
+const FRAC = { 12: '1/2', 13: '1/3', 23: '2/3', 14: '1/4', 34: '3/4', 18: '1/8', 38: '3/8', 58: '5/8', 78: '7/8', 25: '2/5', 35: '3/5', 45: '4/5' };
+const FRAC_CODES = Object.keys(FRAC).join('|');
+function fixFractions(s) {
+  if (!s) return s;
+  return String(s)
+    .replace(new RegExp(`(\\d)\\s+(${FRAC_CODES})(?=\\s|$)`, 'g'), (_m, d, c) => `${d} ${FRAC[c]}`)
+    .replace(new RegExp(`(^|\\s)(${FRAC_CODES})\\s+(cups?|teaspoons?|tablespoons?|tsp|tbsp)\\b`, 'gi'), (_m, pre, c, u) => `${pre}${FRAC[c]} ${u}`);
+}
+
 function renderRecipe(d) {
-  const ing = (d.ingredients || []).map((x) => `<li>${esc(x)}</li>`).join('');
-  const steps = (d.steps || []).map((x) => `<li>${esc(x)}</li>`).join('');
+  const ing = (d.ingredients || []).map((x) => `<li>${esc(fixFractions(x))}</li>`).join('');
+  const steps = (d.steps || []).map((x) => `<li>${esc(fixFractions(x))}</li>`).join('');
   const tags = (d.tags || []).slice(0, 16).map((x) => `<span class="r-tag">${esc(x)}</span>`).join('');
   const meta = [
     d.rating != null ? `★ ${(+d.rating).toFixed(1)}${d.review_count ? ` (${d.review_count} reviews)` : ''}` : '',

@@ -764,9 +764,20 @@ app.get('/food/:source/:id', async (req, res) => {
 });
 
 // ── Server-rendered recipe pages (permalinks + SEO) ────────────────────────
+// RecipeNLG stripped "/" from fractions; restore known cooking fractions (see
+// the client's fixFractions for the rationale).
+const FRAC: Record<string, string> = { 12: '1/2', 13: '1/3', 23: '2/3', 14: '1/4', 34: '3/4', 18: '1/8', 38: '3/8', 58: '5/8', 78: '7/8', 25: '2/5', 35: '3/5', 45: '4/5' };
+const FRAC_CODES = Object.keys(FRAC).join('|');
+function fixFractions(s: string): string {
+  if (!s) return s;
+  return String(s)
+    .replace(new RegExp(`(\\d)\\s+(${FRAC_CODES})(?=\\s|$)`, 'g'), (_m, d, c) => `${d} ${FRAC[c]}`)
+    .replace(new RegExp(`(^|\\s)(${FRAC_CODES})\\s+(cups?|teaspoons?|tablespoons?|tsp|tbsp)\\b`, 'gi'), (_m, pre, c, u) => `${pre}${FRAC[c]} ${u}`);
+}
+
 function recipeSummaryHtml(d: any): string {
-  const ing = (d.ingredients || []).map((x: string) => `<li>${escHtml(x)}</li>`).join('');
-  const steps = (d.steps || []).map((x: string) => `<li>${escHtml(x)}</li>`).join('');
+  const ing = (d.ingredients || []).map((x: string) => `<li>${escHtml(fixFractions(x))}</li>`).join('');
+  const steps = (d.steps || []).map((x: string) => `<li>${escHtml(fixFractions(x))}</li>`).join('');
   return `
     ${d.image ? `<img class="r-img" src="${escHtml(d.image)}" alt="${escHtml(d.title)}" />` : ''}
     <h1 class="r-title">${escHtml(d.title)}</h1>
@@ -788,8 +799,8 @@ function renderRecipePage(d: any): string {
     '@context': 'https://schema.org', '@type': 'Recipe', name: d.title, url,
     ...(d.image ? { image: [d.image] } : {}),
     ...(d.description ? { description: d.description } : {}),
-    recipeIngredient: d.ingredients || [],
-    recipeInstructions: (d.steps || []).map((s: string) => ({ '@type': 'HowToStep', text: s })),
+    recipeIngredient: (d.ingredients || []).map(fixFractions),
+    recipeInstructions: (d.steps || []).map((s: string) => ({ '@type': 'HowToStep', text: fixFractions(s) })),
     ...(d.minutes ? { totalTime: `PT${d.minutes}M` } : {}),
     ...(d.category ? { recipeCategory: d.category } : {}),
     ...(d.rating != null ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: d.rating, reviewCount: d.review_count || 1 } } : {}),
