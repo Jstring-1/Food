@@ -670,9 +670,29 @@ const RECIPE_SORT: Record<string, string> = {
   calories_desc: 'calories DESC NULLS LAST',
 };
 
+// Top recipe categories (Food.com only) for the browse dropdown. Cached ~6h.
+let CATEGORY_CACHE: { t: number; data: string[] } | null = null;
+app.get('/api/recipe-categories', async (_req, res) => {
+  if (CATEGORY_CACHE && Date.now() - CATEGORY_CACHE.t < 6 * 60 * 60 * 1000) {
+    return void res.json({ categories: CATEGORY_CACHE.data });
+  }
+  try {
+    const r = await pool.query(
+      `SELECT category FROM recipe WHERE category IS NOT NULL AND category <> ''
+        GROUP BY category ORDER BY count(*) DESC LIMIT 60`);
+    const data = r.rows.map((x) => x.category);
+    CATEGORY_CACHE = { t: Date.now(), data };
+    res.json({ categories: data });
+  } catch {
+    res.json({ categories: [] });
+  }
+});
+
 app.get('/api/recipes', async (req, res) => {
   const q = String(req.query.q ?? '').trim();
-  if (q.length < 3) return void res.json({ results: [], hasMore: false });
+  const category = String(req.query.category ?? '').trim();
+  // Need either a search term or a category to browse (categories are Food.com).
+  if (q.length < 3 && !category) return void res.json({ results: [], hasMore: false });
   const cached = cacheGet('r:' + req.originalUrl);
   if (cached) return void res.json(cached);
   const source = String(req.query.source ?? 'all');
@@ -680,23 +700,33 @@ app.get('/api/recipes', async (req, res) => {
   const limit = Math.min(60, Math.max(1, Number(req.query.limit) || 40));
   const offset = Math.min(2000, Math.max(0, Number(req.query.offset) || 0));
   try {
-    const p: unknown[] = [`%${q}%`];
-    const where = ['title ILIKE $1'];
+    const p: unknown[] = [];
+    const where: string[] = [];
+    if (q.length >= 3) { p.push(`%${q}%`); where.push(`title ILIKE $${p.length}`); }
+    if (category) { p.push(category); where.push(`category = $${p.length}`); }
     if (source === 'foodcom' || source === 'recipenlg') { p.push(source); where.push(`source = $${p.length}`); }
 
     let orderBy = RECIPE_SORT[sort] || '';
-    if (!orderBy) { // relevance: prefix match, then shorter (more generic) titles,
-      // with rating only as a tiebreaker so both sources interleave (a hard
-      // "has rating" gate would bury all of RecipeNLG below Food.com).
-      p.push(`${q}%`);
-      orderBy = `(title ILIKE $${p.length}) DESC, length(title) ASC,
-        rating DESC NULLS LAST, title ASC`;
+    if (!orderBy) {
+      if (q.length >= 3) { // relevance: prefix match, then shorter (generic) titles,
+        // rating only as a tiebreaker so both sources interleave.
+        p.push(`${q}%`);
+        orderBy = `(title ILIKE $${p.length}) DESC, length(title) ASC, rating DESC NULLS LAST, title ASC`;
+      } else { // category browse with no query: best-rated first
+        orderBy = `rating DESC NULLS LAST, review_count DESC NULLS LAST, title ASC`;
+      }
     }
     p.push(limit + 1, offset); // fetch one extra to detect "has more"
+    // DISTINCT ON (lower(title)) collapses RecipeNLG's many identical titles to
+    // one row (best-rated representative) BEFORE the limit, so a page isn't all
+    // dupes. The outer query applies the chosen ordering + pagination.
     const r = await pool.query(
-      `SELECT id, source, title, minutes, n_ingredients, rating, review_count, calories, image, source_url
-         FROM recipe WHERE ${where.join(' AND ')} ORDER BY ${orderBy}
-         LIMIT $${p.length - 1} OFFSET $${p.length}`, p);
+      `SELECT * FROM (
+         SELECT DISTINCT ON (lower(title))
+                id, source, title, minutes, n_ingredients, rating, review_count, calories, image, source_url
+           FROM recipe WHERE ${where.join(' AND ')}
+           ORDER BY lower(title), rating DESC NULLS LAST
+       ) s ORDER BY ${orderBy} LIMIT $${p.length - 1} OFFSET $${p.length}`, p);
     const hasMore = r.rows.length > limit;
     const payload = { results: r.rows.slice(0, limit), hasMore };
     cacheSet('r:' + req.originalUrl, payload);

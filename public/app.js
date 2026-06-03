@@ -194,12 +194,19 @@ function applyPath(path) {
   else { showPage('food', false); closeLabel(false); }
 }
 
+// Populate the category browse dropdown once.
+fetch('/api/recipe-categories').then((r) => r.json()).then(({ categories }) => {
+  const sel = $('r-category');
+  for (const c of categories || []) sel.add(new Option(c, c));
+}).catch(() => { /* leave just "All categories" */ });
+
 let recipeOffset = 0;
 async function searchRecipes(append = false) {
   const v = recipeQ.value.trim();
-  if (v.length < 3) { recipeResults.innerHTML = ''; return; }
+  const category = $('r-category').value;
+  if (v.length < 3 && !category) { recipeResults.innerHTML = ''; return; }
   const offset = append ? recipeOffset : 0;
-  const p = new URLSearchParams({ q: v, source: $('r-source').value, sort: $('r-sort').value, limit: PAGE, offset });
+  const p = new URLSearchParams({ q: v, category, source: $('r-source').value, sort: $('r-sort').value, limit: PAGE, offset });
   const r = await fetch('/api/recipes?' + p.toString());
   if (!r.ok) { if (!append) recipeResults.innerHTML = '<div class="empty">…</div>'; return; }
   const { results, hasMore } = await r.json();
