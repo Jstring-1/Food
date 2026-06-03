@@ -118,6 +118,32 @@ function syncUrl(push) {
   if (url !== location.pathname) push ? history.pushState({}, '', url) : history.replaceState({}, '', url);
 }
 
+// ── Document title (reflects the open detail / active page) ────────────────
+const BASE_TITLE = 'FoodLand.fyi — Food & Nutrition Database';
+const RECIPE_TITLE = 'Recipe Search — FoodLand.fyi';
+let foodTitle = BASE_TITLE, recipeTitle = RECIPE_TITLE;
+function applyTitle() { document.title = activePage === 'food' ? foodTitle : recipeTitle; }
+
+// ── Viewed results (color-changes them like visited links) ────────────────
+let viewed = new Set();
+try { viewed = new Set(JSON.parse(localStorage.getItem('viewed') || '[]')); } catch { /* ignore */ }
+function markViewed(key) {
+  viewed.add(key);
+  try { localStorage.setItem('viewed', JSON.stringify([...viewed].slice(-3000))); } catch { /* ignore */ }
+}
+
+// ── "Load more" button helpers ────────────────────────────────────────────
+const PAGE = 40;
+function removeLoadMore(c) { const b = c.querySelector('.load-more'); if (b) b.remove(); }
+function addLoadMore(c, fn) {
+  removeLoadMore(c);
+  const b = document.createElement('button');
+  b.className = 'load-more';
+  b.textContent = 'Load more';
+  b.onclick = () => { b.disabled = true; b.textContent = 'Loading…'; fn(); };
+  c.appendChild(b);
+}
+
 function showPage(p, push = true) {
   activePage = p;
   document.getElementById('page-food').hidden = p !== 'food';
@@ -125,6 +151,7 @@ function showPage(p, push = true) {
   document.getElementById('nav-food').classList.toggle('active', p === 'food');
   document.getElementById('nav-recipe').classList.toggle('active', p === 'recipe');
   syncUrl(push);
+  applyTitle();
   (p === 'food' ? foodQ : recipeQ).focus();
 }
 document.getElementById('nav-food').addEventListener('click', () => showPage('food'));
@@ -132,13 +159,13 @@ document.getElementById('nav-recipe').addEventListener('click', () => showPage('
 
 function closeLabel(push = true) {
   panelEl.hidden = true;
-  foodUrl = '/';
-  if (activePage === 'food') syncUrl(push);
+  foodUrl = '/'; foodTitle = BASE_TITLE;
+  if (activePage === 'food') { syncUrl(push); applyTitle(); }
 }
 function closeRecipe(push = true) {
   recipePanel.hidden = true;
-  recipeUrl = '/recipes';
-  if (activePage === 'recipe') syncUrl(push);
+  recipeUrl = '/recipes'; recipeTitle = RECIPE_TITLE;
+  if (activePage === 'recipe') { syncUrl(push); applyTitle(); }
 }
 document.getElementById('label-close').addEventListener('click', () => closeLabel());
 
@@ -153,39 +180,47 @@ function applyPath(path) {
   else { showPage('food', false); closeLabel(false); }
 }
 
-async function searchRecipes() {
+let recipeOffset = 0;
+async function searchRecipes(append = false) {
   const v = recipeQ.value.trim();
   if (v.length < 3) { recipeResults.innerHTML = ''; return; }
-  const p = new URLSearchParams({ q: v, source: $('r-source').value, sort: $('r-sort').value });
+  const offset = append ? recipeOffset : 0;
+  const p = new URLSearchParams({ q: v, source: $('r-source').value, sort: $('r-sort').value, limit: PAGE, offset });
   const r = await fetch('/api/recipes?' + p.toString());
-  if (!r.ok) { recipeResults.innerHTML = '<div class="empty">…</div>'; return; }
-  const { results } = await r.json();
-  if (!results.length) { recipeResults.innerHTML = '<div class="empty">No recipes found.</div>'; return; }
-  recipeResults.innerHTML = '';
-  for (const it of results) {
-    const a = document.createElement('a');
-    a.className = 'result';
-    a.href = `/recipe/${it.id}`;
-    const meta = [
-      it.rating != null ? `★ ${(+it.rating).toFixed(1)}${it.review_count ? ` (${it.review_count})` : ''}` : '',
-      it.minutes != null ? `${it.minutes} min` : '',
-      it.calories != null ? `${Math.round(it.calories)} kcal/serv` : '',
-      it.n_ingredients != null ? `${it.n_ingredients} ingredients` : '',
-    ].filter(Boolean).join(' · ');
-    const thumb = it.image ? `<img class="result-logo r-thumb" src="${esc(it.image)}" alt="" loading="lazy" />` : '';
-    a.innerHTML = thumb +
-      `<span class="result-main">` +
-        `<span class="badge recipe">${it.source === 'foodcom' ? 'Food.com' : 'RecipeNLG'}</span>` +
-        `<span class="title">${esc(it.title)}</span>` +
-        `<div class="sub">${esc(meta)}</div>` +
-      `</span>`;
-    a.onclick = (e) => {
-      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
-      e.preventDefault();
-      openRecipe(it.id);
-    };
-    recipeResults.appendChild(a);
-  }
+  if (!r.ok) { if (!append) recipeResults.innerHTML = '<div class="empty">…</div>'; return; }
+  const { results, hasMore } = await r.json();
+  removeLoadMore(recipeResults);
+  if (!append) recipeResults.innerHTML = '';
+  if (!append && !results.length) { recipeResults.innerHTML = '<div class="empty">No recipes found.</div>'; return; }
+  for (const it of results) recipeResults.appendChild(makeRecipeRow(it));
+  recipeOffset = offset + PAGE;
+  if (hasMore) addLoadMore(recipeResults, () => searchRecipes(true));
+}
+
+function makeRecipeRow(it) {
+  const a = document.createElement('a');
+  a.className = 'result' + (viewed.has(`recipe:${it.id}`) ? ' viewed' : '');
+  a.href = `/recipe/${it.id}`;
+  const meta = [
+    it.rating != null ? `★ ${(+it.rating).toFixed(1)}${it.review_count ? ` (${it.review_count})` : ''}` : '',
+    it.minutes != null ? `${it.minutes} min` : '',
+    it.calories != null ? `${Math.round(it.calories)} kcal/serv` : '',
+    it.n_ingredients != null ? `${it.n_ingredients} ingredients` : '',
+  ].filter(Boolean).join(' · ');
+  const thumb = it.image ? `<img class="result-logo r-thumb" src="${esc(it.image)}" alt="" loading="lazy" />` : '';
+  a.innerHTML = thumb +
+    `<span class="result-main">` +
+      `<span class="badge recipe">${it.source === 'foodcom' ? 'Food.com' : 'RecipeNLG'}</span>` +
+      `<span class="title">${esc(it.title)}</span>` +
+      `<div class="sub">${esc(meta)}</div>` +
+    `</span>`;
+  a.onclick = (e) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    e.preventDefault();
+    markViewed(`recipe:${it.id}`); a.classList.add('viewed');
+    openRecipe(it.id);
+  };
+  return a;
 }
 
 async function openRecipe(id, push = true) {
@@ -201,6 +236,8 @@ async function openRecipe(id, push = true) {
 
 // Render the recipe and wire the collapsible nutrition (persisted) + close.
 function paintRecipe(d) {
+  recipeTitle = `${d.title} — Recipe | FoodLand.fyi`;
+  if (activePage === 'recipe') applyTitle();
   recipeEl.innerHTML = renderRecipe(d);
   const det = recipeEl.querySelector('details.r-nutri');
   if (det) det.addEventListener('toggle', () => { try { localStorage.setItem('recipeNutriOpen', det.open ? '1' : '0'); } catch { /* ignore */ } });
@@ -249,44 +286,53 @@ function renderRecipe(d) {
     <p class="r-src">${srcLink} <span class="meta">· Recipe content belongs to its source; shown here with attribution.</span></p>`;
 }
 
-async function searchFood() {
+let foodOffset = 0;
+async function searchFood(append = false) {
   const v = foodQ.value.trim();
   if (!isBarcode(v) && v.length < 3) { foodResults.innerHTML = ''; return; }
-  const r = await fetch('/api/search?' + readFilters(v).toString());
-  if (!r.ok) { foodResults.innerHTML = '<div class="empty">…</div>'; return; }
-  const { results } = await r.json();
-  if (!results.length) { foodResults.innerHTML = '<div class="empty">No matches.</div>'; return; }
-  foodResults.innerHTML = '';
-  for (const item of results) {
-    // Real link (crawlable, shareable, open-in-new-tab) — intercepted for the SPA.
-    const b = document.createElement('a');
-    b.className = 'result';
-    b.href = `/food/${item.source}/${encodeURIComponent(item.id)}`;
-    const grade = nutriChip(item.grade);
-    const kcal = item.kcal != null ? `<span class="kcal">${Math.round(item.kcal)} kcal/100g</span>` : '';
-    const giChip = item.gi != null ? `<span class="gi-chip gi-${item.giCategory}">GI ${item.gi}</span>` : '';
-    const vc = item.variantCount > 1 ? `<span class="vcount">· ${item.variantCount} variants</span>` : '';
-    const logo = item.brand ? `<img class="result-logo" data-brand="${esc(item.brand)}" alt="" hidden />` : '';
-    b.innerHTML = logo +
-      `<span class="result-main">` +
-        `<span class="badge ${item.source}">${item.source}</span>` +
-        `<span class="title">${esc(item.title)}</span>${grade}${giChip}` +
-        `<div class="sub">${esc(item.sub || '')}${kcal}${vc}</div>` +
-      `</span>`;
-    b.onclick = (e) => {
-      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; // let new-tab work
-      e.preventDefault();
-      openLabel(item.source, item.id, item.variants);
-    };
-    const cmp = document.createElement('button');
-    cmp.className = 'cmp-btn';
-    cmp.title = 'Add to comparison';
-    cmp.textContent = inCompare(item) ? '✓' : '+';
-    cmp.onclick = (e) => { e.preventDefault(); e.stopPropagation(); toggleCompare(item); cmp.textContent = inCompare(item) ? '✓' : '+'; };
-    b.appendChild(cmp);
-    foodResults.appendChild(b);
-  }
+  const offset = append ? foodOffset : 0;
+  const r = await fetch('/api/search?' + readFilters(v).toString() + `&limit=${PAGE}&offset=${offset}`);
+  if (!r.ok) { if (!append) foodResults.innerHTML = '<div class="empty">…</div>'; return; }
+  const { results, hasMore } = await r.json();
+  removeLoadMore(foodResults);
+  if (!append) foodResults.innerHTML = '';
+  if (!append && !results.length) { foodResults.innerHTML = '<div class="empty">No matches.</div>'; return; }
+  for (const item of results) foodResults.appendChild(makeFoodRow(item));
+  foodOffset = offset + PAGE;
+  if (hasMore) addLoadMore(foodResults, () => searchFood(true));
   loadLogos(foodResults);
+}
+
+function makeFoodRow(item) {
+  const key = `food:${item.source}:${item.id}`;
+  // Real link (crawlable, shareable, open-in-new-tab) — intercepted for the SPA.
+  const b = document.createElement('a');
+  b.className = 'result' + (viewed.has(key) ? ' viewed' : '');
+  b.href = `/food/${item.source}/${encodeURIComponent(item.id)}`;
+  const grade = nutriChip(item.grade);
+  const kcal = item.kcal != null ? `<span class="kcal">${Math.round(item.kcal)} kcal/100g</span>` : '';
+  const giChip = item.gi != null ? `<span class="gi-chip gi-${item.giCategory}">GI ${item.gi}</span>` : '';
+  const vc = item.variantCount > 1 ? `<span class="vcount">· ${item.variantCount} variants</span>` : '';
+  const logo = item.brand ? `<img class="result-logo" data-brand="${esc(item.brand)}" alt="" hidden />` : '';
+  b.innerHTML = logo +
+    `<span class="result-main">` +
+      `<span class="badge ${item.source}">${item.source}</span>` +
+      `<span class="title">${esc(item.title)}</span>${grade}${giChip}` +
+      `<div class="sub">${esc(item.sub || '')}${kcal}${vc}</div>` +
+    `</span>`;
+  b.onclick = (e) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; // let new-tab work
+    e.preventDefault();
+    markViewed(key); b.classList.add('viewed');
+    openLabel(item.source, item.id, item.variants);
+  };
+  const cmp = document.createElement('button');
+  cmp.className = 'cmp-btn';
+  cmp.title = 'Add to comparison';
+  cmp.textContent = inCompare(item) ? '✓' : '+';
+  cmp.onclick = (e) => { e.preventDefault(); e.stopPropagation(); toggleCompare(item); cmp.textContent = inCompare(item) ? '✓' : '+'; };
+  b.appendChild(cmp);
+  return b;
 }
 
 const cmpKey = (it) => `${it.source}:${it.id}`;
@@ -366,6 +412,8 @@ async function renderInto(source, id) {
 // Render the label at serving index `idx`, wiring the serving dropdown to
 // re-render (and recalculate every value) when a different serving is picked.
 function paintLabel(body, d, idx) {
+  foodTitle = `${d.title} — Nutrition Facts | FoodLand.fyi`;
+  if (activePage === 'food') applyTitle();
   body.innerHTML = renderLabel(d, idx);
   const sel = body.querySelector('#serving-select');
   if (sel) { sel.selectedIndex = idx; sel.onchange = () => paintLabel(body, d, sel.selectedIndex); }

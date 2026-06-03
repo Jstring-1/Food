@@ -113,6 +113,12 @@ app.get('/api/search', async (req, res) => {
   const minProtein = numOrNull(req.query.minProtein), maxProtein = numOrNull(req.query.maxProtein);
   const minSugar = numOrNull(req.query.minSugar), maxSugar = numOrNull(req.query.maxSugar);
   const minFat = numOrNull(req.query.minFat), maxFat = numOrNull(req.query.maxFat);
+  const limit = Math.min(60, Math.max(1, Number(req.query.limit) || 40));
+  const offset = Math.min(400, Math.max(0, Number(req.query.offset) || 0));
+  const want = offset + limit;
+  // Over-fetch so grouping/dedup still leaves enough for the requested page.
+  const usdaCap = Math.min(800, want * 2 + 60);
+  const offCap = Math.min(500, want * 2 + 20);
 
   const isBarcode = /^\d{6,14}$/.test(q);
   if (!isBarcode && q.length < 3) {
@@ -134,7 +140,7 @@ app.get('/api/search', async (req, res) => {
           `SELECT code, product_name, brands FROM off_product WHERE code = $1 LIMIT 25`, [q]);
         bc.push(...r.rows.map((x) => ({ source: 'off', id: x.code, title: x.product_name || '(unnamed)', sub: x.brands || `barcode ${q}`, variantCount: 1 })));
       }
-      return void res.json({ results: bc, mode: 'barcode' });
+      return void res.json({ results: bc, mode: 'barcode', hasMore: false });
     }
 
     const like = `%${q}%`;
@@ -170,7 +176,7 @@ app.get('/api/search', async (req, res) => {
                coalesce(b.brand_name, b.brand_owner) AS brand,
                b.serving_size, b.serving_size_unit, b.household_serving FROM fdc_food f
         LEFT JOIN fdc_branded b ON b.fdc_id = f.fdc_id
-        WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT 80`;
+        WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT ${usdaCap}`;
       tasks.push(pool.query(sql, p).then((r) => { usdaRows.push(...r.rows); }));
     }
 
@@ -192,7 +198,7 @@ app.get('/api/search', async (req, res) => {
       const sql = `
         SELECT code, product_name, brands, categories, nutriscore_grade,
                energy_kcal_100g kcal, proteins_100g protein, sugars_100g sugars, fat_100g fat
-          FROM off_product WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT 40`;
+          FROM off_product WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT ${offCap}`;
       tasks.push(pool.query(sql, p).then((r) => {
         offRows.push(...r.rows.map((x) => ({
           source: 'off', id: x.code, title: x.product_name,
@@ -215,7 +221,9 @@ app.get('/api/search', async (req, res) => {
     else if (sort === 'name') out.sort((a, b) => a.title.localeCompare(b.title));
     else out.sort((a, b) => scoreItem(a, ql) - scoreItem(b, ql)); // relevance
 
-    const results = dedupeByTitleBrand(out).slice(0, 40);
+    const all = dedupeByTitleBrand(out);
+    const results = all.slice(offset, offset + limit);
+    const hasMore = all.length > offset + limit;
     // Attach a GI indicator to whole-food results (cached lookup).
     for (const it of results) {
       if (it.source === 'usda' && it.dataType && it.dataType !== 'branded_food') {
@@ -223,7 +231,7 @@ app.get('/api/search', async (req, res) => {
         if (g) { it.gi = g.gi; it.giCategory = g.category; }
       }
     }
-    res.json({ results });
+    res.json({ results, hasMore });
   } catch (err) {
     res.status(500).json({ error: 'query failed', detail: String(err) });
   }
@@ -640,9 +648,11 @@ const RECIPE_SORT: Record<string, string> = {
 
 app.get('/api/recipes', async (req, res) => {
   const q = String(req.query.q ?? '').trim();
-  if (q.length < 3) return void res.json({ results: [] });
+  if (q.length < 3) return void res.json({ results: [], hasMore: false });
   const source = String(req.query.source ?? 'all');
   const sort = String(req.query.sort ?? 'relevance');
+  const limit = Math.min(60, Math.max(1, Number(req.query.limit) || 40));
+  const offset = Math.min(2000, Math.max(0, Number(req.query.offset) || 0));
   try {
     const p: unknown[] = [`%${q}%`];
     const where = ['title ILIKE $1'];
@@ -654,10 +664,13 @@ app.get('/api/recipes', async (req, res) => {
       orderBy = `(title ILIKE $${p.length}) DESC, (rating IS NOT NULL) DESC,
         rating DESC NULLS LAST, length(title) ASC, title ASC`;
     }
+    p.push(limit + 1, offset); // fetch one extra to detect "has more"
     const r = await pool.query(
       `SELECT id, source, title, minutes, n_ingredients, rating, review_count, calories, image, source_url
-         FROM recipe WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT 40`, p);
-    res.json({ results: r.rows });
+         FROM recipe WHERE ${where.join(' AND ')} ORDER BY ${orderBy}
+         LIMIT $${p.length - 1} OFFSET $${p.length}`, p);
+    const hasMore = r.rows.length > limit;
+    res.json({ results: r.rows.slice(0, limit), hasMore });
   } catch (err) {
     res.status(500).json({ error: 'query failed', detail: String(err) });
   }

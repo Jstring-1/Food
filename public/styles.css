@@ -1,6 +1,9 @@
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; } /* beat display:flex on .compare-* etc. */
+a { text-decoration: none; } /* no underlines by default; real text links underline on hover */
+.credits a:hover, .r-src a:hover, .meta a:hover, .leaders a:hover,
+#info-content a:hover, footer a:hover { text-decoration: underline; }
 body {
   font: 16px/1.5 system-ui, -apple-system, sans-serif;
   margin: 0; background: #0e0e14; color: #e6e6ef;
@@ -123,6 +126,14 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
   background: #fff; border-radius: 6px; padding: 2px;
 }
 .result:hover, .result:focus { background: #1a1a26; outline: none; }
+.result.viewed .title { color: #9b8cc7; } /* dim viewed results, like visited links */
+.load-more {
+  display: block; width: 100%; margin: .4rem 0 1rem; padding: .6rem;
+  background: #16161f; color: #9aa0ff; border: 1px solid #2a2a3a; border-radius: 8px;
+  font-size: .9rem; cursor: pointer;
+}
+.load-more:hover { border-color: #6e6eff; }
+.load-more:disabled { opacity: .6; cursor: default; }
 .result .title { font-weight: 600; }
 .result .sub { color: #8a8aa0; font-size: .85rem; }
 .badge {
