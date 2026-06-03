@@ -685,10 +685,12 @@ app.get('/api/recipes', async (req, res) => {
     if (source === 'foodcom' || source === 'recipenlg') { p.push(source); where.push(`source = $${p.length}`); }
 
     let orderBy = RECIPE_SORT[sort] || '';
-    if (!orderBy) { // relevance: prefix match, then rated/popular, then shorter titles
+    if (!orderBy) { // relevance: prefix match, then shorter (more generic) titles,
+      // with rating only as a tiebreaker so both sources interleave (a hard
+      // "has rating" gate would bury all of RecipeNLG below Food.com).
       p.push(`${q}%`);
-      orderBy = `(title ILIKE $${p.length}) DESC, (rating IS NOT NULL) DESC,
-        rating DESC NULLS LAST, length(title) ASC, title ASC`;
+      orderBy = `(title ILIKE $${p.length}) DESC, length(title) ASC,
+        rating DESC NULLS LAST, title ASC`;
     }
     p.push(limit + 1, offset); // fetch one extra to detect "has more"
     const r = await pool.query(
