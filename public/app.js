@@ -138,7 +138,8 @@ async function searchRecipes() {
       it.calories != null ? `${Math.round(it.calories)} kcal/serv` : '',
       it.n_ingredients != null ? `${it.n_ingredients} ingredients` : '',
     ].filter(Boolean).join(' · ');
-    a.innerHTML =
+    const thumb = it.image ? `<img class="result-logo r-thumb" src="${esc(it.image)}" alt="" loading="lazy" />` : '';
+    a.innerHTML = thumb +
       `<span class="result-main">` +
         `<span class="badge recipe">${it.source === 'foodcom' ? 'Food.com' : 'RecipeNLG'}</span>` +
         `<span class="title">${esc(it.title)}</span>` +
@@ -175,8 +176,9 @@ function renderRecipe(d) {
   if (d.calories != null) {
     const rows = [
       ['Calories', d.calories, '', 0], ['Fat', d.fat_g, 'g', 1], ['Saturated Fat', d.sat_fat_g, 'g', 1],
-      ['Carbs', d.carbs_g, 'g', 1], ['Sugar', d.sugar_g, 'g', 1], ['Protein', d.protein_g, 'g', 1],
-      ['Sodium', d.sodium_mg, 'mg', 0],
+      ['Cholesterol', d.cholesterol_mg, 'mg', 0], ['Sodium', d.sodium_mg, 'mg', 0],
+      ['Carbs', d.carbs_g, 'g', 1], ['Fiber', d.fiber_g, 'g', 1], ['Sugar', d.sugar_g, 'g', 1],
+      ['Protein', d.protein_g, 'g', 1],
     ].filter(([, v]) => v != null)
       .map(([l, v, u, dp]) => `<tr><td>${l}</td><td>${(+v).toFixed(dp)}${u}</td></tr>`).join('');
     nutri = `<div class="r-nutri"><h3>Nutrition <span>per serving</span></h3><table>${rows}</table></div>`;
@@ -186,7 +188,9 @@ function renderRecipe(d) {
     ? `<a href="${esc(d.source_url)}" target="_blank" rel="noopener">View original on ${srcName} ↗</a>` : '';
   return `
     <button type="button" class="r-close" onclick="document.getElementById('recipe-panel').hidden=true">✕</button>
+    ${d.image ? `<img class="r-img" src="${esc(d.image)}" alt="${esc(d.title)}" loading="lazy" />` : ''}
     <h1 class="r-title">${esc(d.title)}</h1>
+    ${d.category ? `<p class="r-cat">${esc(d.category)}</p>` : ''}
     ${meta ? `<p class="r-meta">${esc(meta)}</p>` : ''}
     ${d.description ? `<p class="r-desc">${esc(d.description)}</p>` : ''}
     ${tags ? `<div class="r-tags">${tags}</div>` : ''}

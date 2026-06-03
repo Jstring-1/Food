@@ -653,7 +653,7 @@ app.get('/api/recipes', async (req, res) => {
         rating DESC NULLS LAST, length(title) ASC, title ASC`;
     }
     const r = await pool.query(
-      `SELECT id, source, title, minutes, n_ingredients, rating, review_count, calories, source_url
+      `SELECT id, source, title, minutes, n_ingredients, rating, review_count, calories, image, source_url
          FROM recipe WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT 40`, p);
     res.json({ results: r.rows });
   } catch (err) {
@@ -667,8 +667,8 @@ app.get('/api/recipe', async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT id, source, source_id, title, ingredients, steps, tags, minutes, n_ingredients,
-              source_url, description, rating, review_count,
-              calories, fat_g, sat_fat_g, sugar_g, sodium_mg, protein_g, carbs_g
+              source_url, image, category, description, rating, review_count,
+              calories, fat_g, sat_fat_g, cholesterol_mg, sugar_g, fiber_g, sodium_mg, protein_g, carbs_g
          FROM recipe WHERE id = $1`, [id]);
     if (!r.rowCount) return void res.status(404).json({ error: 'not found' });
     res.json(r.rows[0]);

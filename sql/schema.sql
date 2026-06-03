@@ -157,18 +157,27 @@ CREATE TABLE IF NOT EXISTS recipe (
   minutes       INTEGER,                 -- prep+cook time (foodcom)
   n_ingredients INTEGER,
   source_url    TEXT,                    -- link back to the original recipe
+  image         TEXT,                    -- primary photo URL (foodcom)
+  category      TEXT,                    -- recipe category (foodcom)
   description   TEXT,
-  rating        DOUBLE PRECISION,        -- avg user rating (foodcom interactions)
+  rating        DOUBLE PRECISION,        -- avg user rating (foodcom)
   review_count  INTEGER,
-  -- Per-serving nutrition (foodcom; converted from its %DV array). NULL for nlg.
-  calories      DOUBLE PRECISION,
-  fat_g         DOUBLE PRECISION,
-  sat_fat_g     DOUBLE PRECISION,
-  sugar_g       DOUBLE PRECISION,
-  sodium_mg     DOUBLE PRECISION,
-  protein_g     DOUBLE PRECISION,
-  carbs_g       DOUBLE PRECISION
+  -- Per-serving nutrition in grams/mg (foodcom). NULL for nlg.
+  calories       DOUBLE PRECISION,
+  fat_g          DOUBLE PRECISION,
+  sat_fat_g      DOUBLE PRECISION,
+  cholesterol_mg DOUBLE PRECISION,
+  sugar_g        DOUBLE PRECISION,
+  fiber_g        DOUBLE PRECISION,
+  sodium_mg      DOUBLE PRECISION,
+  protein_g      DOUBLE PRECISION,
+  carbs_g        DOUBLE PRECISION
 );
+
+ALTER TABLE recipe ADD COLUMN IF NOT EXISTS image          TEXT;
+ALTER TABLE recipe ADD COLUMN IF NOT EXISTS category       TEXT;
+ALTER TABLE recipe ADD COLUMN IF NOT EXISTS cholesterol_mg DOUBLE PRECISION;
+ALTER TABLE recipe ADD COLUMN IF NOT EXISTS fiber_g        DOUBLE PRECISION;
 
 CREATE INDEX IF NOT EXISTS recipe_title_trgm ON recipe USING gin (title gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS recipe_source_idx ON recipe (source);
