@@ -71,7 +71,8 @@ main { max-width: 980px; margin: 0 auto; padding: 0 1rem 2rem; }
 .results::-webkit-scrollbar-thumb:hover { background: #43435a; }
 
 /* ── Sugar cube visualization ──────────────────────────────────── */
-.sugar-cubes { display: flex; flex-wrap: wrap; gap: 4px; max-width: 320px; margin-top: 10px; cursor: help; }
+.sugar-cubes { display: flex; flex-wrap: wrap; gap: 4px; max-width: 320px; margin-top: 10px; cursor: pointer; }
+.sugar-cubes:hover, .sugar-cubes:focus-visible { outline: 2px solid #6e6eff; outline-offset: 3px; border-radius: 4px; }
 .sugar-cubes .cube { width: 16px; height: 16px; border-radius: 3px;
   background: linear-gradient(135deg, #ffffff, #dfe3ea); border: 1px solid #b9bfc9;
   box-shadow: inset 0 -2px 0 rgba(0,0,0,.12); }
@@ -323,10 +324,36 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
 
 /* ── Flagged additives in ingredients ──────────────────────────── */
 .nf .additive-note { font-size: 10px; font-weight: 700; color: #b00020; padding-top: 6px; }
-.additive-warn { cursor: help; border-radius: 2px; padding: 0 1px;
+.additive-warn { cursor: pointer; border-radius: 2px; padding: 0 1px;
   text-decoration: underline dotted; text-underline-offset: 2px; }
+.additive-warn:hover, .additive-warn:focus-visible { outline: 1px solid currentColor; outline-offset: 1px; }
 .additive-warn.avoid { color: #8a0016; background: #ffdcdc; text-decoration-color: #b00020; }
 .additive-warn.caution { color: #6b4500; background: #ffedc2; text-decoration-color: #b07b00; }
+
+/* Additive info popup (inside .info-card) */
+.additive-pop h2 { margin: 0 0 .5rem; font-size: 1.25rem; display: flex; align-items: center; gap: .5rem; }
+.additive-badge { font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 4px; letter-spacing: .02em; }
+.additive-badge.avoid { color: #ffdcdc; background: #8a0016; }
+.additive-badge.caution { color: #2a1c00; background: #f0b94a; }
+.additive-aka { color: #9a9ab0; font-size: 12px; margin: 0 0 .75rem; }
+.additive-blurb { color: #d6d6e2; line-height: 1.5; margin: 0 0 1rem; }
+.additive-links-head { color: #e6e6ef; margin: 0 0 .35rem; }
+ul.additive-links { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-wrap: wrap; gap: .5rem; }
+ul.additive-links a { display: inline-block; border: 1px solid #33334a; border-radius: 6px;
+  padding: .4rem .7rem; color: #aab4ff; }
+ul.additive-links a:hover { border-color: #6e6eff; }
+.additive-disclaimer { color: #8a8aa0; font-size: 11px; margin: 0; }
+
+/* Sugar-cube info popup (inside .info-card) */
+.sugar-pop h2 { margin: 0 0 .5rem; font-size: 1.25rem; display: flex; align-items: baseline; gap: .5rem; }
+.sugar-amt { font-size: 1rem; font-weight: 700; color: #f0b94a; }
+.sugar-cube-line { color: #9a9ab0; font-size: 12px; margin: 0 0 .9rem; }
+.sugar-lead { color: #d6d6e2; line-height: 1.5; margin: 0 0 1rem; }
+.sugar-lead b { color: #f0b94a; }
+.sugar-eq-head { color: #e6e6ef; margin: 0 0 .35rem; }
+ul.sugar-eq { list-style: none; margin: 0 0 1rem; padding: 0; }
+ul.sugar-eq li { color: #d6d6e2; padding: .2rem 0; }
+.sugar-eq-sub { color: #8a8aa0; font-size: 11px; }
 
 
 /* GI chip on search results */

@@ -558,7 +558,7 @@ const round1 = (x: number) => Math.round(x * 10) / 10;
 function buildServings(servingGrams: number | null, household: string | null): { label: string; grams: number }[] {
   const out: { label: string; grams: number }[] = [];
   if (servingGrams && servingGrams > 0) {
-    out.push({ label: household ? `${household} (${round1(servingGrams)} g)` : `1 serving (${round1(servingGrams)} g)`, grams: servingGrams });
+    out.push({ label: (household ? `${household} (${round1(servingGrams)} g)` : `1 serving (${round1(servingGrams)} g)`) + ' (sug)', grams: servingGrams });
   }
   out.push({ label: '100 g', grams: 100 });
   out.push({ label: '1 oz (28.3 g)', grams: OZ_G });
@@ -584,7 +584,7 @@ async function offLabel(code: string) {
   // Parse grams from the free-text serving_size (e.g. "30 g", "1 cup (240 ml)").
   const servings: { label: string; grams: number }[] = [];
   const m = p.serving_size ? String(p.serving_size).match(/([\d.]+)\s*(g|ml|gram|grams)\b/i) : null;
-  if (m) servings.push({ label: String(p.serving_size).trim(), grams: Number(m[1]) });
+  if (m) servings.push({ label: String(p.serving_size).trim() + ' (sug)', grams: Number(m[1]) });
   servings.push({ label: '100 g', grams: 100 });
   servings.push({ label: '1 oz (28.3 g)', grams: OZ_G });
 

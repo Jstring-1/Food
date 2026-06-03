@@ -40,7 +40,8 @@ function additiveMatcher() {
   ADDITIVE_RE = terms.length ? new RegExp('(?<![\\w-])(' + terms.map(escRe).join('|') + ')(?![\\w-])', 'gi') : false;
 }
 
-// Escape ingredient text, then wrap flagged additives with a hover-warning span.
+// Escape ingredient text, then wrap flagged additives in a clickable span that
+// opens an info popup (blurb + links to scientific study searches).
 function highlightAdditives(raw) {
   additiveMatcher();
   let count = 0;
@@ -49,8 +50,7 @@ function highlightAdditives(raw) {
     const a = ADDITIVE_MAP.get(m.toLowerCase());
     if (!a) return m;
     count++;
-    const tip = (a.severity === 'avoid' ? 'AVOID — ' : 'Caution — ') + a.note;
-    return `<span class="additive-warn ${a.severity}" title="${esc(tip)}">${m}</span>`;
+    return `<span class="additive-warn ${a.severity}" role="button" tabindex="0" data-term="${esc(m.toLowerCase())}">${m}</span>`;
   });
   return { html, count };
 }
@@ -569,7 +569,8 @@ function glyChips(n, d) {
     + `</div>`;
 }
 
-// Visualize sugar as ~4 g sugar cubes for the current serving.
+// Visualize sugar as ~4 g sugar cubes for the current serving. Clickable —
+// opens a popup with everyday sugar equivalents (see openSugarInfo).
 function sugarViz(sugars) {
   if (sugars == null || sugars <= 0) return '';
   const count = Math.round(sugars / 4);
@@ -577,8 +578,8 @@ function sugarViz(sugars) {
   const icons = Array.from({ length: shown }, () => '<span class="cube"></span>').join('');
   const more = count > shown ? `<span class="cube-more">+${count - shown}</span>` : '';
   const label = count >= 1 ? `${count} sugar cube${count === 1 ? '' : 's'}` : 'under 1 sugar cube';
-  const cap = `≈ ${label} · ${(+sugars).toFixed(1)} g sugar (1 cube ≈ 4 g)`;
-  return `<div class="sugar-cubes" title="${cap}" aria-label="${cap}">${icons}${more}</div>`;
+  const cap = `≈ ${label} · ${(+sugars).toFixed(1)} g sugar — tap for details`;
+  return `<div class="sugar-cubes" role="button" tabindex="0" data-sugar="${(+sugars).toFixed(2)}" aria-label="${cap}">${icons}${more}</div>`;
 }
 
 // Ingredients line with flagged-additive warnings (hover for details).
@@ -589,7 +590,7 @@ function ingredientsHtml(raw) {
   if (!raw) return '';
   const { html, count } = highlightAdditives(raw);
   const warn = count > 0
-    ? `<p class="additive-note">⚠ ${count} flagged additive${count === 1 ? '' : 's'} — hover for details</p>` : '';
+    ? `<p class="additive-note">⚠ ${count} flagged additive${count === 1 ? '' : 's'} — tap for details</p>` : '';
   return `${warn}<p class="ingredients"><b>Ingredients:</b> ${html}</p>`;
 }
 
@@ -646,6 +647,81 @@ function wireInfoLinks() {
 
 document.getElementById('info-close').onclick = () => { infoModal.hidden = true; };
 infoModal.onclick = (e) => { if (e.target === infoModal) infoModal.hidden = true; };
+
+// ── Flagged-additive popup: blurb + links to scientific study searches.
+function openAdditiveInfo(term) {
+  additiveMatcher();
+  const a = ADDITIVE_MAP && ADDITIVE_MAP.get(term);
+  if (!a) return;
+  const name = a.terms[0];
+  const q = encodeURIComponent(name + ' food additive health');
+  const sev = a.severity === 'avoid' ? 'Avoid' : 'Caution';
+  const aka = a.terms.slice(1).join(', ');
+  infoContent.innerHTML = `
+    <div class="additive-pop">
+      <h2>${esc(name)} <span class="additive-badge ${a.severity}">${sev}</span></h2>
+      ${aka ? `<p class="additive-aka">Also: ${esc(aka)}</p>` : ''}
+      <p class="additive-blurb">${esc(a.note)}</p>
+      <p class="additive-links-head"><b>Research this ingredient</b></p>
+      <ul class="additive-links">
+        <li><a href="https://pubmed.ncbi.nlm.nih.gov/?term=${q}" target="_blank" rel="noopener">PubMed ↗</a></li>
+        <li><a href="https://scholar.google.com/scholar?q=${q}" target="_blank" rel="noopener">Google Scholar ↗</a></li>
+        <li><a href="https://europepmc.org/search?query=${q}" target="_blank" rel="noopener">Europe PMC ↗</a></li>
+      </ul>
+      <p class="additive-disclaimer">Flags reflect regulatory actions and published assessments — not medical advice.</p>
+    </div>`;
+  infoModal.hidden = false;
+  infoContent.scrollTop = 0;
+}
+// ── Sugar-cube popup: cube count + everyday sugar equivalents. Typical added
+// sugar per common item (grams), used to make the serving's sugar relatable.
+const SUGAR_REFS = [
+  { name: 'regular Snickers bar', plural: 'regular Snickers bars', g: 27 },
+  { name: '12 oz can of Coca-Cola', plural: '12 oz cans of Coca-Cola', g: 39 },
+  { name: 'glazed donut', plural: 'glazed donuts', g: 10 },
+  { name: 'Oreo cookie', plural: 'Oreo cookies', g: 4.6 },
+  { name: 'teaspoon of sugar', plural: 'teaspoons of sugar', g: 4.2 },
+];
+function fmtRatio(n) { return n >= 10 ? Math.round(n) : +n.toFixed(1); }
+
+function openSugarInfo(grams) {
+  const g = +grams;
+  if (!(g > 0)) return;
+  const cubes = Math.round(g / 4);
+  const snick = fmtRatio(g / 27);
+  const others = SUGAR_REFS.filter((r) => r.g !== 27)
+    .map((r) => ({ r, v: fmtRatio(g / r.g) }))
+    .filter((x) => x.v >= 0.1);
+  infoContent.innerHTML = `
+    <div class="sugar-pop">
+      <h2>Sugar <span class="sugar-amt">${g.toFixed(1)} g</span></h2>
+      <p class="sugar-cube-line">≈ ${cubes} sugar cube${cubes === 1 ? '' : 's'} (1 cube ≈ 4 g)</p>
+      <p class="sugar-lead">This serving has about the same sugar as
+        <b>${snick} ${snick === 1 ? 'regular Snickers bar' : 'regular Snickers bars'}</b>.</p>
+      <p class="sugar-eq-head"><b>Other everyday equivalents</b></p>
+      <ul class="sugar-eq">
+        ${others.map(({ r, v }) => `<li><b>${v}×</b> ${esc(v === 1 ? r.name : r.plural)} <span class="sugar-eq-sub">(${r.g} g each)</span></li>`).join('')}
+      </ul>
+      <p class="additive-disclaimer">Equivalents are approximate, using typical sugar content per item.</p>
+    </div>`;
+  infoModal.hidden = false;
+  infoContent.scrollTop = 0;
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest) return;
+  const add = e.target.closest('.additive-warn');
+  if (add) { e.preventDefault(); openAdditiveInfo(add.dataset.term); return; }
+  const sug = e.target.closest('.sugar-cubes');
+  if (sug) { e.preventDefault(); openSugarInfo(sug.dataset.sugar); }
+});
+document.addEventListener('keydown', (e) => {
+  if ((e.key !== 'Enter' && e.key !== ' ') || !e.target.closest) return;
+  const add = e.target.closest('.additive-warn');
+  if (add) { e.preventDefault(); openAdditiveInfo(add.dataset.term); return; }
+  const sug = e.target.closest('.sugar-cubes');
+  if (sug) { e.preventDefault(); openSugarInfo(sug.dataset.sugar); }
+});
 document.querySelectorAll('footer a[href="/leaders"], footer a[href="/developers"]').forEach((a) => {
   a.onclick = (e) => { e.preventDefault(); openInfo(a.getAttribute('href')); };
 });
