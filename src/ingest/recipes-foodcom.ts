@@ -14,7 +14,7 @@ import { createReadStream, existsSync } from 'node:fs';
 import { parse } from 'csv-parse';
 import pgCopy from 'pg-copy-streams';
 import { pool } from '../db.js';
-import { row, write, end, parseList } from './util.js';
+import { row, write, end, parseList, jsonArray } from './util.js';
 
 const { from: copyFrom } = pgCopy;
 const RECIPES = process.env.FOODCOM_RECIPES ?? './data/recipes/recipes.csv';
@@ -76,9 +76,9 @@ async function main() {
       const ing = ingredients(r.RecipeIngredientQuantities, r.RecipeIngredientParts);
       await write(dest, row(
         'foodcom', r.RecipeId, title,
-        JSON.stringify(ing),
-        JSON.stringify(parseList(r.RecipeInstructions)),
-        JSON.stringify(parseList(r.Keywords)),
+        jsonArray(ing),
+        jsonArray(parseList(r.RecipeInstructions)),
+        jsonArray(parseList(r.Keywords)),
         minutes(r.TotalTime) ?? minutes(r.PrepTime),
         ing.length || null,
         `https://www.food.com/recipe/${slug(title)}-${r.RecipeId}`,

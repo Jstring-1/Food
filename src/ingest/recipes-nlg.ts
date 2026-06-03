@@ -12,7 +12,7 @@ import { createReadStream, existsSync } from 'node:fs';
 import { parse } from 'csv-parse';
 import pgCopy from 'pg-copy-streams';
 import { pool } from '../db.js';
-import { row, write, end, parseList } from './util.js';
+import { row, write, end, parseList, jsonArray } from './util.js';
 
 const { from: copyFrom } = pgCopy;
 const FILE = process.env.RECIPENLG_FILE ?? './data/recipes/full_dataset.csv';
@@ -46,8 +46,8 @@ async function main() {
       const idx = r[''] ?? r.index ?? null;
       await write(dest, row(
         'recipenlg', idx, title,
-        JSON.stringify(parseList(r.ingredients)),
-        JSON.stringify(parseList(r.directions)),
+        jsonArray(parseList(r.ingredients)),
+        jsonArray(parseList(r.directions)),
         '[]', // RecipeNLG has no tags (its NER field is ingredient nouns)
         url(r.link),
       ));

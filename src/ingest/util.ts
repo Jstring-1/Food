@@ -36,10 +36,16 @@ export async function end(stream: Writable): Promise<void> {
   await finished(stream);
 }
 
+// JSON-encode a string array for a JSONB COPY field. Strips the escaped-NUL
+// sequence: it is valid JSON but Postgres JSONB rejects it on insert.
+export function jsonArray(arr: string[]): string {
+  return JSON.stringify(arr).replace(/\\u0000/g, '');
+}
+
 // Parse a list-of-strings cell. RecipeNLG stores valid JSON arrays; Food.com
-// stores Python list reprs (single quotes, apostrophes inside). Try JSON first,
-// then fall back to a quote-aware tokenizer that handles both quote styles and
-// backslash escapes.
+// stores Python/R list reprs (single quotes, apostrophes inside, c("a","b")).
+// Try JSON first, then fall back to a quote-aware tokenizer that handles both
+// quote styles and backslash escapes.
 export function parseList(s: string | undefined | null): string[] {
   if (!s) return [];
   const t = s.trim();
@@ -47,7 +53,7 @@ export function parseList(s: string | undefined | null): string[] {
   try {
     const j = JSON.parse(t);
     if (Array.isArray(j)) return j.map((x) => String(x));
-  } catch { /* fall through to Python-list tokenizer */ }
+  } catch { /* fall through to tokenizer */ }
   const out: string[] = [];
   let cur = '';
   let q: string | null = null; // current quote char, or null when outside a string
