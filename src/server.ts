@@ -791,7 +791,7 @@ app.get('/api/cuisine-spices', async (_req, res) => {
       const spices = [...(counts.get(cat) || new Map()).entries()]
         .map(([name, n]) => ({ name, pct: Math.round((n / Math.max(total, 1)) * 100) }))
         .sort((a, b) => b.pct - a.pct)
-        .slice(0, 8);
+        .slice(0, 12);
       return { cuisine: label, recipes: total, spices };
     }).filter((c) => c.recipes >= 20)
       .sort((a, b) => b.recipes - a.recipes);

@@ -4,7 +4,6 @@ const recipeQ = document.getElementById('q-recipe');
 const recipeResults = document.getElementById('results-recipe');
 const panelEl = document.getElementById('label-panel');
 const labelEl = document.getElementById('label');
-const statsEl = document.getElementById('stats');
 const compareBar = document.getElementById('compare-bar');
 const compareModal = document.getElementById('compare-modal');
 const compareLabels = document.getElementById('compare-labels');
@@ -57,14 +56,6 @@ function highlightAdditives(raw) {
 function fmt(v, unit) { return v == null ? null : `${(+v).toLocaleString(undefined, { maximumFractionDigits: 1 })}${unit}`; }
 function dv(field, v) { return v == null || !DV[field] ? '' : Math.round((v / DV[field]) * 100) + '%'; }
 
-async function loadStats() {
-  try {
-    const s = await (await fetch('/api/stats')).json();
-    const foods = (s.usda || 0) + (s.off || 0);
-    statsEl.innerHTML =
-      `<b>${foods.toLocaleString()}</b> foods · <b>${(s.recipe || 0).toLocaleString()}</b> recipes`;
-  } catch { statsEl.textContent = ''; }
-}
 
 const $ = (id) => document.getElementById(id);
 const isBarcode = (s) => /^\d{6,14}$/.test(s);
@@ -751,7 +742,6 @@ document.querySelectorAll('footer a[href="/leaders"], footer a[href="/developers
 });
 
 syncFilterVisibility();
-loadStats();
 
 // Hydrate from a server-rendered permalink, seeding each page's URL state.
 if (window.__FOOD__) {
