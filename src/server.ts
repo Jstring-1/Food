@@ -102,7 +102,27 @@ const ORDER = {
   off: { name: 'product_name ASC', kcal_desc: 'kcal DESC NULLS LAST', kcal_asc: 'kcal ASC NULLS LAST', protein_desc: 'protein DESC NULLS LAST', relevance: 'product_name ASC' },
 } as const;
 
+// In-memory LRU+TTL cache for search responses. Common/repeated/paged queries
+// (and shared links) return instantly without touching the DB — which also
+// means a cold-cache term is only slow once. Keyed by the full request URL.
+const SEARCH_CACHE = new Map<string, { t: number; data: unknown }>();
+const CACHE_TTL = 10 * 60 * 1000;
+const CACHE_MAX = 1000;
+function cacheGet(key: string): unknown | null {
+  const e = SEARCH_CACHE.get(key);
+  if (!e) return null;
+  if (Date.now() - e.t > CACHE_TTL) { SEARCH_CACHE.delete(key); return null; }
+  SEARCH_CACHE.delete(key); SEARCH_CACHE.set(key, e); // bump to most-recent
+  return e.data;
+}
+function cacheSet(key: string, data: unknown): void {
+  SEARCH_CACHE.set(key, { t: Date.now(), data });
+  if (SEARCH_CACHE.size > CACHE_MAX) SEARCH_CACHE.delete(SEARCH_CACHE.keys().next().value as string);
+}
+
 app.get('/api/search', async (req, res) => {
+  const cached = cacheGet('s:' + req.originalUrl);
+  if (cached) return void res.json(cached);
   const q = String(req.query.q ?? '').trim();
   const source = String(req.query.source ?? 'all'); // all | usda | off
   const usdaType = String(req.query.usdaType ?? 'all'); // all | branded | whole
@@ -140,7 +160,9 @@ app.get('/api/search', async (req, res) => {
           `SELECT code, product_name, brands FROM off_product WHERE code = $1 LIMIT 25`, [q]);
         bc.push(...r.rows.map((x) => ({ source: 'off', id: x.code, title: x.product_name || '(unnamed)', sub: x.brands || `barcode ${q}`, variantCount: 1 })));
       }
-      return void res.json({ results: bc, mode: 'barcode', hasMore: false });
+      const bcPayload = { results: bc, mode: 'barcode', hasMore: false };
+      cacheSet('s:' + req.originalUrl, bcPayload);
+      return void res.json(bcPayload);
     }
 
     const like = `%${q}%`;
@@ -231,7 +253,9 @@ app.get('/api/search', async (req, res) => {
         if (g) { it.gi = g.gi; it.giCategory = g.category; }
       }
     }
-    res.json({ results, hasMore });
+    const payload = { results, hasMore };
+    cacheSet('s:' + req.originalUrl, payload);
+    res.json(payload);
   } catch (err) {
     res.status(500).json({ error: 'query failed', detail: String(err) });
   }
@@ -649,6 +673,8 @@ const RECIPE_SORT: Record<string, string> = {
 app.get('/api/recipes', async (req, res) => {
   const q = String(req.query.q ?? '').trim();
   if (q.length < 3) return void res.json({ results: [], hasMore: false });
+  const cached = cacheGet('r:' + req.originalUrl);
+  if (cached) return void res.json(cached);
   const source = String(req.query.source ?? 'all');
   const sort = String(req.query.sort ?? 'relevance');
   const limit = Math.min(60, Math.max(1, Number(req.query.limit) || 40));
@@ -670,7 +696,9 @@ app.get('/api/recipes', async (req, res) => {
          FROM recipe WHERE ${where.join(' AND ')} ORDER BY ${orderBy}
          LIMIT $${p.length - 1} OFFSET $${p.length}`, p);
     const hasMore = r.rows.length > limit;
-    res.json({ results: r.rows.slice(0, limit), hasMore });
+    const payload = { results: r.rows.slice(0, limit), hasMore };
+    cacheSet('r:' + req.originalUrl, payload);
+    res.json(payload);
   } catch (err) {
     res.status(500).json({ error: 'query failed', detail: String(err) });
   }
