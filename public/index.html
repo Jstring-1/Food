@@ -23,80 +23,103 @@
     <span id="stats">loading…</span>
   </header>
 
+  <nav class="page-nav">
+    <button type="button" id="nav-food" class="nav-btn active" aria-current="page">Nutrition</button>
+    <button type="button" id="nav-recipe" class="nav-btn">Recipes</button>
+  </nav>
+
   <main>
-    <section class="search">
-      <div class="mode-tabs" role="tablist">
-        <button type="button" id="tab-food" class="mode-tab active" role="tab" aria-selected="true">Nutrition</button>
-        <button type="button" id="tab-recipe" class="mode-tab" role="tab" aria-selected="false">Recipes</button>
-      </div>
+    <!-- ── Nutrition page ─────────────────────────────────────── -->
+    <div class="page" id="page-food">
+      <section class="search">
+        <input id="q-food" type="search" placeholder="Search foods or scan a barcode — e.g. cheddar, banana, 884853601023…" autofocus />
 
-      <input id="q" type="search" placeholder="Search foods or scan a barcode — e.g. cheddar, banana, 884853601023…" autofocus />
+        <div class="filters" id="food-filters">
+          <label>Source
+            <select id="f-source">
+              <option value="all">All</option>
+              <option value="usda">USDA</option>
+              <option value="off">Open Food Facts</option>
+            </select>
+          </label>
+          <label data-when="not-off">USDA type
+            <select id="f-usdatype">
+              <option value="all">All</option>
+              <option value="branded">Branded</option>
+              <option value="whole">Whole foods</option>
+            </select>
+          </label>
+          <label>Sort
+            <select id="f-sort">
+              <option value="relevance">Relevance</option>
+              <option value="name">Name</option>
+              <option value="kcal_desc">Calories ↓</option>
+              <option value="kcal_asc">Calories ↑</option>
+              <option value="protein_desc">Protein ↓</option>
+            </select>
+          </label>
 
-      <div class="filters" id="recipe-filters" hidden>
-        <label>Source
-          <select id="r-source">
-            <option value="all">All</option>
-            <option value="foodcom">Food.com</option>
-            <option value="recipenlg">RecipeNLG</option>
-          </select>
-        </label>
-        <label>Sort
-          <select id="r-sort">
-            <option value="relevance">Relevance</option>
-            <option value="rating">Top rated</option>
-            <option value="quick">Quickest</option>
-            <option value="calories_asc">Calories ↑</option>
-            <option value="calories_desc">Calories ↓</option>
-          </select>
-        </label>
-      </div>
+          <details class="ranges">
+            <summary>Nutrient ranges (per 100 g)</summary>
+            <div class="range-grid">
+              <span>Calories</span><input id="f-minkcal" type="number" min="0" placeholder="min" /><input id="f-maxkcal" type="number" min="0" placeholder="max" />
+              <span>Protein (g)</span><input id="f-minprotein" type="number" min="0" placeholder="min" /><input id="f-maxprotein" type="number" min="0" placeholder="max" />
+              <span>Sugar (g)</span><input id="f-minsugar" type="number" min="0" placeholder="min" /><input id="f-maxsugar" type="number" min="0" placeholder="max" />
+              <span>Fat (g)</span><input id="f-minfat" type="number" min="0" placeholder="min" /><input id="f-maxfat" type="number" min="0" placeholder="max" />
+            </div>
+          </details>
+        </div>
 
-      <div class="filters" id="food-filters">
-        <label>Source
-          <select id="f-source">
-            <option value="all">All</option>
-            <option value="usda">USDA</option>
-            <option value="off">Open Food Facts</option>
-          </select>
-        </label>
-        <label data-when="not-off">USDA type
-          <select id="f-usdatype">
-            <option value="all">All</option>
-            <option value="branded">Branded</option>
-            <option value="whole">Whole foods</option>
-          </select>
-        </label>
-        <label>Sort
-          <select id="f-sort">
-            <option value="relevance">Relevance</option>
-            <option value="name">Name</option>
-            <option value="kcal_desc">Calories ↓</option>
-            <option value="kcal_asc">Calories ↑</option>
-            <option value="protein_desc">Protein ↓</option>
-          </select>
-        </label>
+        <div id="results-food" class="results"></div>
+      </section>
 
-        <details class="ranges">
-          <summary>Nutrient ranges (per 100 g)</summary>
-          <div class="range-grid">
-            <span>Calories</span><input id="f-minkcal" type="number" min="0" placeholder="min" /><input id="f-maxkcal" type="number" min="0" placeholder="max" />
-            <span>Protein (g)</span><input id="f-minprotein" type="number" min="0" placeholder="min" /><input id="f-maxprotein" type="number" min="0" placeholder="max" />
-            <span>Sugar (g)</span><input id="f-minsugar" type="number" min="0" placeholder="min" /><input id="f-maxsugar" type="number" min="0" placeholder="max" />
-            <span>Fat (g)</span><input id="f-minfat" type="number" min="0" placeholder="min" /><input id="f-maxfat" type="number" min="0" placeholder="max" />
-          </div>
-        </details>
-      </div>
+      <section id="label-panel" class="label-panel" hidden>
+        <div id="label"></div>
+      </section>
 
-      <div id="results" class="results"></div>
-    </section>
+      <p class="credits">
+        <a href="/leaders">Nutrient leaders</a> · <a href="/developers">API</a> &nbsp;|&nbsp;
+        Data: <a href="https://fdc.nal.usda.gov/">USDA FoodData Central</a> (public domain) &amp;
+        <a href="https://world.openfoodfacts.org/">Open Food Facts</a> (ODbL).
+      </p>
+    </div>
 
-    <section id="label-panel" class="label-panel" hidden>
-      <div id="label"></div>
-    </section>
+    <!-- ── Recipe page ────────────────────────────────────────── -->
+    <div class="page" id="page-recipe" hidden>
+      <section class="search">
+        <input id="q-recipe" type="search" placeholder="Search recipes — e.g. chicken curry, banana bread, lasagna…" />
 
-    <section id="recipe-panel" class="recipe-panel" hidden>
-      <div id="recipe"></div>
-    </section>
+        <div class="filters" id="recipe-filters">
+          <label>Source
+            <select id="r-source">
+              <option value="all">All</option>
+              <option value="foodcom">Food.com</option>
+              <option value="recipenlg">RecipeNLG</option>
+            </select>
+          </label>
+          <label>Sort
+            <select id="r-sort">
+              <option value="relevance">Relevance</option>
+              <option value="rating">Top rated</option>
+              <option value="quick">Quickest</option>
+              <option value="calories_asc">Calories ↑</option>
+              <option value="calories_desc">Calories ↓</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="results-recipe" class="results"></div>
+      </section>
+
+      <section id="recipe-panel" class="recipe-panel" hidden>
+        <div id="recipe"></div>
+      </section>
+
+      <p class="credits">
+        Recipes: <a href="https://www.food.com/">Food.com</a> &amp;
+        <a href="https://recipenlg.cs.put.poznan.pl/">RecipeNLG</a> — shown with attribution; content belongs to its source.
+      </p>
+    </div>
   </main>
 
   <div id="info-modal" class="info-modal" hidden>
@@ -114,15 +137,6 @@
     </div>
     <div id="compare-labels" class="compare-labels"></div>
   </div>
-
-  <footer>
-    <p class="meta">
-      <a href="/leaders">Nutrient leaders</a> · <a href="/developers">API</a> &nbsp;|&nbsp;
-      Data: <a href="https://fdc.nal.usda.gov/">USDA FoodData Central</a> (public domain) &amp;
-      <a href="https://world.openfoodfacts.org/">Open Food Facts</a> (ODbL).
-      %DV based on a 2,000 calorie diet.
-    </p>
-  </footer>
 
   <script src="/additives.js"></script>
   <script src="/app.js"></script>

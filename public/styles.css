@@ -18,17 +18,31 @@ footer { max-width: 980px; margin: 0 auto; padding: 1rem; }
 #stats b { color: #e6e6ef; }
 footer .meta { font-size: .62rem; line-height: 1.4; color: #6e6e85; }
 
-main {
-  max-width: 980px; margin: 0 auto; padding: 0 1rem 2rem;
-  display: grid; grid-template-columns: 1fr; gap: 2rem;
+main { max-width: 980px; margin: 0 auto; padding: 0 1rem 2rem; }
+.page { display: grid; grid-template-columns: 1fr; gap: 2rem; }
+
+/* Top nav: wide buttons to switch pages (state persists per page). */
+.page-nav { width: 100%; max-width: 980px; margin: 0 auto; padding: 0 1rem .75rem; display: flex; gap: 8px; }
+.nav-btn {
+  flex: 1; background: #16161f; color: #9a9ab0; border: 1px solid #2a2a3a; border-radius: 10px;
+  padding: .7rem 1rem; font-size: 1rem; font-weight: 700; cursor: pointer;
 }
+.nav-btn:hover { border-color: #43435a; color: #c9c9e0; }
+.nav-btn.active { background: #23233a; color: #fff; border-color: #6e6eff; }
+
+/* Data-source credits below each page (replaces the old footer). */
+.credits { color: #6e6e85; font-size: .62rem; line-height: 1.4; margin: 0; padding-top: .25rem; }
+.credits a { color: #9aa0ff; }
+
 @media (min-width: 760px) {
-  /* Desktop: header + footer + search form + label stay put; only results scroll. */
+  /* Desktop: header + nav + form + label stay put; only results scroll. */
   body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-  main { flex: 1; min-height: 0; width: 100%; grid-template-columns: 1fr 340px; align-items: stretch; padding-bottom: 1rem; }
+  main { flex: 1; min-height: 0; width: 100%; display: flex; padding-bottom: 1rem; }
+  .page { flex: 1; min-height: 0; grid-template-columns: 1fr 340px; grid-template-rows: 1fr auto; align-items: stretch; }
   .search { display: flex; flex-direction: column; min-height: 0; }
   .results { flex: 1; min-height: 0; overflow-y: auto; padding-right: .5rem; }
-  .label-panel { position: static; align-self: start; max-height: 100%; overflow-y: auto; padding-right: .25rem; }
+  .label-panel, .recipe-panel { position: static; align-self: start; max-height: 100%; overflow-y: auto; padding-right: .25rem; }
+  .credits { grid-column: 1 / -1; }
 }
 
 /* Themed results scrollbar */
@@ -126,15 +140,6 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
   border-radius: 3px; margin-left: .3rem; cursor: help; vertical-align: middle; letter-spacing: 0; }
 .nf .nf-grades .grade-chip { margin-left: 0; }
 
-/* ── Mode tabs (Nutrition / Recipes) ───────────────────────────── */
-.mode-tabs { display: flex; gap: 6px; margin-bottom: .6rem; }
-.mode-tab {
-  background: #16161f; color: #9a9ab0; border: 1px solid #2a2a3a; border-radius: 8px;
-  padding: .45rem 1rem; font-size: .9rem; font-weight: 600; cursor: pointer;
-}
-.mode-tab:hover { border-color: #43435a; color: #c9c9e0; }
-.mode-tab.active { background: #23233a; color: #fff; border-color: #6e6eff; }
-
 /* ── Recipe detail panel ───────────────────────────────────────── */
 .recipe-panel { position: relative; }
 @media (min-width: 900px) { .recipe-panel { align-self: start; max-height: 100%; overflow-y: auto; } }
@@ -164,8 +169,9 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
 .r-ing li { font-size: .88rem; color: #d8d8e4; margin-bottom: .2rem; }
 .r-steps ol { margin: 0; padding-left: 1.3rem; }
 .r-steps li { font-size: .9rem; color: #d8d8e4; margin-bottom: .55rem; line-height: 1.4; }
-.r-src { margin-top: 1rem; font-size: .85rem; }
+.r-src { margin-top: 1rem; font-size: .68rem; line-height: 1.4; color: #6e6e85; }
 .r-src a { color: #9aa0ff; }
+.r-src .meta { font-size: .68rem; }
 
 /* ── FDA-style Nutrition Facts label ───────────────────────────── */
 .label-panel { }

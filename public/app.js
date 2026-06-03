@@ -1,5 +1,7 @@
-const qEl = document.getElementById('q');
-const resultsEl = document.getElementById('results');
+const foodQ = document.getElementById('q-food');
+const foodResults = document.getElementById('results-food');
+const recipeQ = document.getElementById('q-recipe');
+const recipeResults = document.getElementById('results-recipe');
 const panelEl = document.getElementById('label-panel');
 const labelEl = document.getElementById('label');
 const statsEl = document.getElementById('stats');
@@ -88,50 +90,45 @@ function syncFilterVisibility() {
   document.querySelectorAll('[data-when="not-usda"]').forEach((el) => (el.style.display = s === 'usda' ? 'none' : ''));
 }
 
-let timer;
-qEl.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 250); });
-// Re-run immediately when any filter changes.
-document.querySelectorAll('.filters select, .filters input').forEach((el) => {
-  el.addEventListener('change', () => { if (el.id === 'f-source') syncFilterVisibility(); search(); });
+// Each page has its own debounced input + live filters; state persists because
+// switching pages only shows/hides them (nothing is cleared).
+let foodTimer, recipeTimer;
+foodQ.addEventListener('input', () => { clearTimeout(foodTimer); foodTimer = setTimeout(searchFood, 250); });
+recipeQ.addEventListener('input', () => { clearTimeout(recipeTimer); recipeTimer = setTimeout(searchRecipes, 250); });
+document.querySelectorAll('#food-filters select, #food-filters input').forEach((el) => {
+  el.addEventListener('change', () => { if (el.id === 'f-source') syncFilterVisibility(); searchFood(); });
+});
+document.querySelectorAll('#recipe-filters select').forEach((el) => {
+  el.addEventListener('change', searchRecipes);
 });
 
-// ── Mode: nutrition search vs recipe search ────────────────────────────────
-let mode = 'food';
+// ── Top nav: switch pages without losing each page's state ─────────────────
 const recipePanel = document.getElementById('recipe-panel');
 const recipeEl = document.getElementById('recipe');
 
-function setMode(m) {
-  if (m === mode) return;
-  mode = m;
-  document.getElementById('tab-food').classList.toggle('active', m === 'food');
-  document.getElementById('tab-recipe').classList.toggle('active', m === 'recipe');
-  document.getElementById('tab-food').setAttribute('aria-selected', m === 'food');
-  document.getElementById('tab-recipe').setAttribute('aria-selected', m === 'recipe');
-  document.getElementById('food-filters').hidden = m !== 'food';
-  document.getElementById('recipe-filters').hidden = m !== 'recipe';
-  panelEl.hidden = true; recipePanel.hidden = true; // close any open detail
-  resultsEl.innerHTML = '';
-  qEl.placeholder = m === 'recipe'
-    ? 'Search recipes — e.g. chicken curry, banana bread, lasagna…'
-    : 'Search foods or scan a barcode — e.g. cheddar, banana, 884853601023…';
-  search();
+function showPage(p) {
+  document.getElementById('page-food').hidden = p !== 'food';
+  document.getElementById('page-recipe').hidden = p !== 'recipe';
+  document.getElementById('nav-food').classList.toggle('active', p === 'food');
+  document.getElementById('nav-recipe').classList.toggle('active', p === 'recipe');
+  (p === 'food' ? foodQ : recipeQ).focus();
 }
-document.getElementById('tab-food').addEventListener('click', () => setMode('food'));
-document.getElementById('tab-recipe').addEventListener('click', () => setMode('recipe'));
+document.getElementById('nav-food').addEventListener('click', () => showPage('food'));
+document.getElementById('nav-recipe').addEventListener('click', () => showPage('recipe'));
 
 async function searchRecipes() {
-  const v = qEl.value.trim();
-  if (v.length < 3) { resultsEl.innerHTML = ''; return; }
+  const v = recipeQ.value.trim();
+  if (v.length < 3) { recipeResults.innerHTML = ''; return; }
   const p = new URLSearchParams({ q: v, source: $('r-source').value, sort: $('r-sort').value });
   const r = await fetch('/api/recipes?' + p.toString());
-  if (!r.ok) { resultsEl.innerHTML = '<div class="empty">…</div>'; return; }
+  if (!r.ok) { recipeResults.innerHTML = '<div class="empty">…</div>'; return; }
   const { results } = await r.json();
-  if (!results.length) { resultsEl.innerHTML = '<div class="empty">No recipes found.</div>'; return; }
-  resultsEl.innerHTML = '';
+  if (!results.length) { recipeResults.innerHTML = '<div class="empty">No recipes found.</div>'; return; }
+  recipeResults.innerHTML = '';
   for (const it of results) {
     const a = document.createElement('a');
     a.className = 'result';
-    a.href = it.source_url || '#';
+    a.href = `/recipe/${it.id}`;
     const meta = [
       it.rating != null ? `★ ${(+it.rating).toFixed(1)}${it.review_count ? ` (${it.review_count})` : ''}` : '',
       it.minutes != null ? `${it.minutes} min` : '',
@@ -149,8 +146,9 @@ async function searchRecipes() {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
       e.preventDefault();
       showRecipe(it.id);
+      history.pushState({}, '', a.href);
     };
-    resultsEl.appendChild(a);
+    recipeResults.appendChild(a);
   }
 }
 
@@ -202,16 +200,14 @@ function renderRecipe(d) {
     <p class="r-src">${srcLink} <span class="meta">· Recipe content belongs to its source; shown here with attribution.</span></p>`;
 }
 
-function search() { return mode === 'recipe' ? searchRecipes() : searchFood(); }
-
 async function searchFood() {
-  const v = qEl.value.trim();
-  if (!isBarcode(v) && v.length < 3) { resultsEl.innerHTML = ''; return; }
+  const v = foodQ.value.trim();
+  if (!isBarcode(v) && v.length < 3) { foodResults.innerHTML = ''; return; }
   const r = await fetch('/api/search?' + readFilters(v).toString());
-  if (!r.ok) { resultsEl.innerHTML = '<div class="empty">…</div>'; return; }
+  if (!r.ok) { foodResults.innerHTML = '<div class="empty">…</div>'; return; }
   const { results } = await r.json();
-  if (!results.length) { resultsEl.innerHTML = '<div class="empty">No matches.</div>'; return; }
-  resultsEl.innerHTML = '';
+  if (!results.length) { foodResults.innerHTML = '<div class="empty">No matches.</div>'; return; }
+  foodResults.innerHTML = '';
   for (const item of results) {
     // Real link (crawlable, shareable, open-in-new-tab) — intercepted for the SPA.
     const b = document.createElement('a');
@@ -240,9 +236,9 @@ async function searchFood() {
     cmp.textContent = inCompare(item) ? '✓' : '+';
     cmp.onclick = (e) => { e.preventDefault(); e.stopPropagation(); toggleCompare(item); cmp.textContent = inCompare(item) ? '✓' : '+'; };
     b.appendChild(cmp);
-    resultsEl.appendChild(b);
+    foodResults.appendChild(b);
   }
-  loadLogos(resultsEl);
+  loadLogos(foodResults);
 }
 
 const cmpKey = (it) => `${it.source}:${it.id}`;
@@ -531,4 +527,11 @@ if (window.__FOOD__) {
   panelEl.hidden = false;
   const body = document.getElementById('label-body');
   if (body) paintLabel(body, window.__FOOD__, 0);
+}
+
+// On a server-rendered /recipe/:id page, switch to the recipe page and render.
+if (window.__RECIPE__) {
+  showPage('recipe');
+  recipePanel.hidden = false;
+  recipeEl.innerHTML = renderRecipe(window.__RECIPE__);
 }

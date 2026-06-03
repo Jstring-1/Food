@@ -748,6 +748,83 @@ app.get('/food/:source/:id', async (req, res) => {
   res.type('html').send(stamp(renderFoodPage(label)));
 });
 
+// ── Server-rendered recipe pages (permalinks + SEO) ────────────────────────
+function recipeSummaryHtml(d: any): string {
+  const ing = (d.ingredients || []).map((x: string) => `<li>${escHtml(x)}</li>`).join('');
+  const steps = (d.steps || []).map((x: string) => `<li>${escHtml(x)}</li>`).join('');
+  return `
+    ${d.image ? `<img class="r-img" src="${escHtml(d.image)}" alt="${escHtml(d.title)}" />` : ''}
+    <h1 class="r-title">${escHtml(d.title)}</h1>
+    ${d.category ? `<p class="r-cat">${escHtml(d.category)}</p>` : ''}
+    <div class="r-cols">
+      <div class="r-ing"><h3>Ingredients</h3><ul>${ing}</ul></div>
+      <div class="r-steps"><h3>Directions</h3><ol>${steps}</ol></div>
+    </div>`;
+}
+
+function renderRecipePage(d: any): string {
+  const url = `${ORIGIN}/recipe/${d.id}`;
+  const srcName = d.source === 'foodcom' ? 'Food.com' : 'RecipeNLG';
+  const title = `${d.title} — Recipe | FoodLand.fyi`;
+  const desc = (d.description
+    || `${d.title} recipe${d.minutes ? ` — ready in ${d.minutes} min` : ''}. Ingredients, directions${d.calories != null ? `, and ${Math.round(d.calories)} calories per serving` : ''}. From ${srcName}.`)
+    .replace(/\s+/g, ' ').slice(0, 300);
+  const jsonLd: any = {
+    '@context': 'https://schema.org', '@type': 'Recipe', name: d.title, url,
+    ...(d.image ? { image: [d.image] } : {}),
+    ...(d.description ? { description: d.description } : {}),
+    recipeIngredient: d.ingredients || [],
+    recipeInstructions: (d.steps || []).map((s: string) => ({ '@type': 'HowToStep', text: s })),
+    ...(d.minutes ? { totalTime: `PT${d.minutes}M` } : {}),
+    ...(d.category ? { recipeCategory: d.category } : {}),
+    ...(d.rating != null ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: d.rating, reviewCount: d.review_count || 1 } } : {}),
+    ...(d.calories != null ? {
+      nutrition: {
+        '@type': 'NutritionInformation', calories: `${Math.round(d.calories)} calories`,
+        ...(d.fat_g != null ? { fatContent: `${d.fat_g} g` } : {}),
+        ...(d.carbs_g != null ? { carbohydrateContent: `${d.carbs_g} g` } : {}),
+        ...(d.protein_g != null ? { proteinContent: `${d.protein_g} g` } : {}),
+      },
+    } : {}),
+  };
+  const head = `
+    <meta name="description" content="${escHtml(desc)}" />
+    <link rel="canonical" href="${escHtml(url)}" />
+    <meta property="og:title" content="${escHtml(title)}" />
+    <meta property="og:description" content="${escHtml(desc)}" />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="${escHtml(url)}" />
+    ${d.image ? `<meta property="og:image" content="${escHtml(d.image)}" />` : ''}
+    <script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script>
+  `;
+  const dataScript = `<script>window.__RECIPE__=${JSON.stringify(d).replace(/</g, '\\u003c')};</script>`;
+
+  return SHELL
+    .replace(/<title>[\s\S]*?<\/title>/, `<title>${escHtml(title)}</title>`)
+    .replace('</head>', `${head}</head>`)
+    .replace('<div class="page" id="page-food">', '<div class="page" id="page-food" hidden>')
+    .replace('<div class="page" id="page-recipe" hidden>', '<div class="page" id="page-recipe">')
+    .replace('id="recipe-panel" class="recipe-panel" hidden', 'id="recipe-panel" class="recipe-panel"')
+    .replace('<div id="recipe"></div>', `<div id="recipe">${recipeSummaryHtml(d)}</div>`)
+    .replace('<script src="/app.js">', `${dataScript}<script src="/app.js">`);
+}
+
+app.get('/recipe/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return void res.status(404).type('html').send(stamp(SHELL));
+  try {
+    const r = await pool.query(
+      `SELECT id, source, source_id, title, ingredients, steps, tags, minutes, n_ingredients,
+              source_url, image, category, description, rating, review_count,
+              calories, fat_g, sat_fat_g, cholesterol_mg, sugar_g, fiber_g, sodium_mg, protein_g, carbs_g
+         FROM recipe WHERE id = $1`, [id]);
+    if (!r.rowCount) return void res.status(404).type('html').send(stamp(SHELL));
+    res.type('html').send(stamp(renderRecipePage(r.rows[0])));
+  } catch {
+    res.status(404).type('html').send(stamp(SHELL));
+  }
+});
+
 // ── robots.txt + sitemaps ──────────────────────────────────────────────────
 const SITEMAP_PAGE = 25000;
 
@@ -759,7 +836,8 @@ app.get('/sitemap.xml', async (_req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT (SELECT count(*) FROM fdc_food)    AS usda,
-              (SELECT count(*) FROM off_product) AS off`,
+              (SELECT count(*) FROM off_product) AS off,
+              (SELECT count(*) FROM recipe)      AS recipe`,
     );
     const pages: string[] = [];
     const add = (src: string, total: number) => {
@@ -767,6 +845,7 @@ app.get('/sitemap.xml', async (_req, res) => {
     };
     add('usda', rows[0].usda);
     add('off', rows[0].off);
+    add('recipe', rows[0].recipe);
     res.type('application/xml').send(
       `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
       pages.map((p) => `<sitemap><loc>${p}</loc></sitemap>`).join('\n') +
@@ -780,15 +859,24 @@ app.get('/sitemap.xml', async (_req, res) => {
 app.get('/sitemaps/:source/:page.xml', async (req, res) => {
   const source = req.params.source;
   const page = Math.max(0, parseInt(req.params.page, 10) || 0);
-  if (source !== 'usda' && source !== 'off') return void res.status(404).end();
+  if (!['usda', 'off', 'recipe'].includes(source)) return void res.status(404).end();
   try {
-    const rows =
-      source === 'usda'
-        ? (await pool.query(`SELECT fdc_id::text id FROM fdc_food ORDER BY fdc_id LIMIT $1 OFFSET $2`, [SITEMAP_PAGE, page * SITEMAP_PAGE])).rows
-        : (await pool.query(`SELECT code id FROM off_product ORDER BY code LIMIT $1 OFFSET $2`, [SITEMAP_PAGE, page * SITEMAP_PAGE])).rows;
+    const off = [SITEMAP_PAGE, page * SITEMAP_PAGE];
+    let loc: (id: string) => string;
+    let rows: { id: string }[];
+    if (source === 'usda') {
+      rows = (await pool.query(`SELECT fdc_id::text id FROM fdc_food ORDER BY fdc_id LIMIT $1 OFFSET $2`, off)).rows;
+      loc = (id) => `${ORIGIN}/food/usda/${encodeURIComponent(id)}`;
+    } else if (source === 'off') {
+      rows = (await pool.query(`SELECT code id FROM off_product ORDER BY code LIMIT $1 OFFSET $2`, off)).rows;
+      loc = (id) => `${ORIGIN}/food/off/${encodeURIComponent(id)}`;
+    } else {
+      rows = (await pool.query(`SELECT id::text id FROM recipe ORDER BY id LIMIT $1 OFFSET $2`, off)).rows;
+      loc = (id) => `${ORIGIN}/recipe/${encodeURIComponent(id)}`;
+    }
     res.type('application/xml').send(
       `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
-      rows.map((r) => `<url><loc>${ORIGIN}/food/${source}/${encodeURIComponent(r.id)}</loc></url>`).join('\n') +
+      rows.map((r) => `<url><loc>${loc(r.id)}</loc></url>`).join('\n') +
       `\n</urlset>`,
     );
   } catch {
