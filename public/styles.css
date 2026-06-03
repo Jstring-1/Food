@@ -17,7 +17,7 @@ header .brand:hover { color: #9aa0ff; }
 footer { max-width: 980px; margin: 0 auto; padding: 1rem; }
 .meta { color: #8a8aa0; font-size: .9rem; margin: 0; }
 .meta a { color: #9aa0ff; }
-#stats { font-size: 1rem; color: #8a8aa0; }
+#stats { font-size: .8rem; color: #8a8aa0; }
 #stats b { color: #e6e6ef; }
 footer .meta { font-size: .62rem; line-height: 1.4; color: #6e6e85; }
 
@@ -357,6 +357,23 @@ ul.additive-links a:hover { border-color: #6e6eff; }
 ul.sugar-eq { list-style: none; margin: 0 0 1rem; padding: 0; }
 ul.sugar-eq li { color: #d6d6e2; padding: .2rem 0; }
 .sugar-eq-sub { color: #8a8aa0; font-size: 11px; }
+
+/* "Top spices by cuisine" trigger + popup */
+.link-btn { background: none; border: none; color: #aab4ff; cursor: pointer; font: inherit;
+  padding: 0; align-self: flex-end; text-decoration: underline; text-underline-offset: 2px; }
+.link-btn:hover { color: #6e6eff; }
+.spice-pop h2 { margin: 0 0 .4rem; font-size: 1.25rem; }
+.spice-intro { color: #9a9ab0; font-size: 12px; margin: 0 0 1rem; }
+.cuisine-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+.cuisine-card { border: 1px solid #2a2a3c; border-radius: 8px; padding: .75rem .9rem; }
+.cuisine-card h3 { margin: 0 0 .5rem; font-size: 1rem; color: #e6e6ef; }
+.cuisine-n { font-weight: 400; font-size: 11px; color: #8a8aa0; }
+.cuisine-card ul { list-style: none; margin: 0; padding: 0; }
+.cuisine-card li { display: grid; grid-template-columns: 84px 1fr 34px; align-items: center;
+  gap: .4rem; padding: .12rem 0; font-size: 12px; color: #d6d6e2; }
+.spice-bar { height: 7px; background: #23232f; border-radius: 4px; overflow: hidden; }
+.spice-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #f0b94a, #e8743b); }
+.spice-pct { text-align: right; color: #9a9ab0; }
 
 
 /* GI chip on search results */

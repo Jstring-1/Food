@@ -60,10 +60,9 @@ function dv(field, v) { return v == null || !DV[field] ? '' : Math.round((v / DV
 async function loadStats() {
   try {
     const s = await (await fetch('/api/stats')).json();
-    const total = (s.usda || 0) + (s.off || 0);
+    const foods = (s.usda || 0) + (s.off || 0);
     statsEl.innerHTML =
-      `<b>${total.toLocaleString()}</b> foods in the database` +
-      ` · ${s.usda.toLocaleString()} USDA · ${s.off.toLocaleString()} Open Food Facts`;
+      `<b>${foods.toLocaleString()}</b> foods · <b>${(s.recipe || 0).toLocaleString()}</b> recipes`;
   } catch { statsEl.textContent = ''; }
 }
 
@@ -706,6 +705,32 @@ function openSugarInfo(grams, servingGrams) {
   infoModal.hidden = false;
   infoContent.scrollTop = 0;
 }
+
+// ── Top spices by cuisine popup (Food.com cuisine categories).
+let SPICE_DATA = null;
+async function openCuisineSpices() {
+  infoModal.hidden = false;
+  infoContent.innerHTML = '<p class="meta" style="padding:1rem">Loading…</p>';
+  infoContent.scrollTop = 0;
+  try {
+    if (!SPICE_DATA) SPICE_DATA = await (await fetch('/api/cuisine-spices')).json();
+    const cards = (SPICE_DATA.cuisines || []).map((c) => `
+      <div class="cuisine-card">
+        <h3>${esc(c.cuisine)} <span class="cuisine-n">${c.recipes.toLocaleString()} recipes</span></h3>
+        <ul>${c.spices.map((s) => `<li><span class="spice-name">${esc(s.name)}</span><span class="spice-bar"><span style="width:${s.pct}%"></span></span><span class="spice-pct">${s.pct}%</span></li>`).join('')}</ul>
+      </div>`).join('');
+    infoContent.innerHTML = `
+      <div class="spice-pop">
+        <h2>Top spices by cuisine</h2>
+        <p class="spice-intro">Share of each cuisine's recipes that use a given spice or herb. Based on Food.com recipes tagged by cuisine.</p>
+        <div class="cuisine-grid">${cards || '<p class="meta">No data.</p>'}</div>
+      </div>`;
+    infoContent.scrollTop = 0;
+  } catch {
+    infoContent.innerHTML = '<p class="meta" style="padding:1rem">Could not load.</p>';
+  }
+}
+$('spice-btn')?.addEventListener('click', openCuisineSpices);
 
 document.addEventListener('click', (e) => {
   if (!e.target.closest) return;

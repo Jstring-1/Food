@@ -54,11 +54,12 @@ app.get('/api/stats', async (_req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT (SELECT count(*) FROM fdc_food)    AS usda,
-              (SELECT count(*) FROM off_product) AS off`,
+              (SELECT count(*) FROM off_product) AS off,
+              (SELECT count(*) FROM recipe)      AS recipe`,
     );
-    res.json({ usda: Number(rows[0].usda), off: Number(rows[0].off) });
+    res.json({ usda: Number(rows[0].usda), off: Number(rows[0].off), recipe: Number(rows[0].recipe) });
   } catch {
-    res.json({ usda: 0, off: 0, error: 'database not ready' });
+    res.json({ usda: 0, off: 0, recipe: 0, error: 'database not ready' });
   }
 });
 
@@ -685,6 +686,120 @@ app.get('/api/recipe-categories', async (_req, res) => {
     res.json({ categories: data });
   } catch {
     res.json({ categories: [] });
+  }
+});
+
+// ── Top spices by cuisine ───────────────────────────────────────────────────
+// Food.com cuisine categories that actually exist in the data, with a friendly
+// label. Recipes carry a single category, so these are the cuisine subset.
+const CUISINES: { cat: string; label: string }[] = [
+  { cat: 'Indian', label: 'Indian' }, { cat: 'Thai', label: 'Thai' },
+  { cat: 'Mexican', label: 'Mexican' }, { cat: 'Chinese', label: 'Chinese' },
+  { cat: 'Japanese', label: 'Japanese' }, { cat: 'Korean', label: 'Korean' },
+  { cat: 'Vietnamese', label: 'Vietnamese' }, { cat: 'Greek', label: 'Greek' },
+  { cat: 'Spanish', label: 'Spanish' }, { cat: 'German', label: 'German' },
+  { cat: 'Moroccan', label: 'Moroccan' }, { cat: 'Caribbean', label: 'Caribbean' },
+  { cat: 'Cajun', label: 'Cajun' }, { cat: 'Tex Mex', label: 'Tex-Mex' },
+  { cat: 'Southwestern U.S.', label: 'Southwestern' }, { cat: 'African', label: 'African' },
+  { cat: 'Ethiopian', label: 'Ethiopian' }, { cat: 'Lebanese', label: 'Lebanese' },
+  { cat: 'Turkish', label: 'Turkish' }, { cat: 'Hungarian', label: 'Hungarian' },
+  { cat: 'Russian', label: 'Russian' }, { cat: 'Polish', label: 'Polish' },
+  { cat: 'Portuguese', label: 'Portuguese' }, { cat: 'Cuban', label: 'Cuban' },
+  { cat: 'Brazilian', label: 'Brazilian' }, { cat: 'Filipino', label: 'Filipino' },
+  { cat: 'Indonesian', label: 'Indonesian' }, { cat: 'Malaysian', label: 'Malaysian' },
+  { cat: 'Hawaiian', label: 'Hawaiian' },
+];
+
+// Spice/herb vocabulary. `terms` match (substring, lowercased) within a single
+// ingredient line; `not` excludes that line when it also contains a term (e.g.
+// "clove" should not count "garlic clove"). Aromatics like onion/garlic and
+// pantry basics (salt, sugar, oil) are intentionally excluded.
+const SPICE_VOCAB: { label: string; terms: string[]; not?: string[] }[] = [
+  { label: 'Cumin', terms: ['cumin'] },
+  { label: 'Coriander', terms: ['coriander'] },
+  { label: 'Cilantro', terms: ['cilantro'] },
+  { label: 'Turmeric', terms: ['turmeric'] },
+  { label: 'Cardamom', terms: ['cardamom'] },
+  { label: 'Cinnamon', terms: ['cinnamon'] },
+  { label: 'Cloves', terms: ['clove'], not: ['garlic'] },
+  { label: 'Nutmeg', terms: ['nutmeg'] },
+  { label: 'Mace', terms: ['mace'] },
+  { label: 'Ginger', terms: ['ginger'], not: ['gingerbread', 'ginger ale', 'ginger beer'] },
+  { label: 'Paprika', terms: ['paprika'] },
+  { label: 'Cayenne', terms: ['cayenne'] },
+  { label: 'Chili powder', terms: ['chili powder', 'chile powder', 'chilli powder'] },
+  { label: 'Chili pepper', terms: ['chili', 'chile', 'chilli', 'chipotle', 'ancho', 'jalapeno', 'jalapeño', 'serrano', 'habanero', 'poblano'], not: ['powder', 'sauce'] },
+  { label: 'Garam masala', terms: ['garam masala'] },
+  { label: 'Curry powder', terms: ['curry powder'] },
+  { label: 'Curry paste', terms: ['curry paste'] },
+  { label: 'Fenugreek', terms: ['fenugreek'] },
+  { label: 'Mustard seed', terms: ['mustard seed', 'mustard powder', 'ground mustard', 'dry mustard', 'dried mustard'] },
+  { label: 'Fennel', terms: ['fennel seed', 'fennel'] },
+  { label: 'Star anise', terms: ['star anise'] },
+  { label: 'Anise', terms: ['anise'], not: ['star anise'] },
+  { label: 'Saffron', terms: ['saffron'] },
+  { label: 'Allspice', terms: ['allspice'] },
+  { label: 'Bay leaf', terms: ['bay leaf', 'bay leaves', 'bay leave'] },
+  { label: 'Oregano', terms: ['oregano'] },
+  { label: 'Basil', terms: ['basil'] },
+  { label: 'Thyme', terms: ['thyme'] },
+  { label: 'Rosemary', terms: ['rosemary'] },
+  { label: 'Sage', terms: ['sage'] },
+  { label: 'Parsley', terms: ['parsley'] },
+  { label: 'Dill', terms: ['dill'] },
+  { label: 'Mint', terms: ['mint'], not: ['peppermint extract'] },
+  { label: 'Tarragon', terms: ['tarragon'] },
+  { label: 'Marjoram', terms: ['marjoram'] },
+  { label: 'Lemongrass', terms: ['lemongrass', 'lemon grass'] },
+  { label: 'Galangal', terms: ['galangal'] },
+  { label: 'Sumac', terms: ['sumac'] },
+  { label: 'Sesame', terms: ['sesame'] },
+  { label: 'Five-spice', terms: ['five spice', 'five-spice', '5 spice'] },
+  { label: 'Black pepper', terms: ['black pepper', 'black peppercorn'] },
+  { label: 'White pepper', terms: ['white pepper'] },
+  { label: 'Red pepper flakes', terms: ['red pepper flake', 'crushed red pepper', 'red pepper, crushed'] },
+  { label: 'Caraway', terms: ['caraway'] },
+];
+
+let SPICE_CACHE: { t: number; data: any } | null = null;
+app.get('/api/cuisine-spices', async (_req, res) => {
+  if (SPICE_CACHE && Date.now() - SPICE_CACHE.t < 6 * 60 * 60 * 1000) {
+    return void res.json(SPICE_CACHE.data);
+  }
+  try {
+    const cats = CUISINES.map((c) => c.cat);
+    const r = await pool.query(
+      `SELECT category, ingredients FROM recipe WHERE category = ANY($1) AND ingredients IS NOT NULL`,
+      [cats]);
+    // Tally, per cuisine, how many recipes use each spice.
+    const totals = new Map<string, number>();
+    const counts = new Map<string, Map<string, number>>();
+    for (const c of cats) { totals.set(c, 0); counts.set(c, new Map()); }
+    for (const row of r.rows) {
+      const cat = row.category as string;
+      const lines: string[] = (row.ingredients || []).map((x: unknown) => String(x).toLowerCase());
+      if (!lines.length) continue;
+      totals.set(cat, (totals.get(cat) || 0) + 1);
+      const cmap = counts.get(cat)!;
+      for (const sp of SPICE_VOCAB) {
+        const hit = lines.some((l) => sp.terms.some((t) => l.includes(t)) && !(sp.not || []).some((n) => l.includes(n)));
+        if (hit) cmap.set(sp.label, (cmap.get(sp.label) || 0) + 1);
+      }
+    }
+    const cuisines = CUISINES.map(({ cat, label }) => {
+      const total = totals.get(cat) || 0;
+      const spices = [...(counts.get(cat) || new Map()).entries()]
+        .map(([name, n]) => ({ name, pct: Math.round((n / Math.max(total, 1)) * 100) }))
+        .sort((a, b) => b.pct - a.pct)
+        .slice(0, 8);
+      return { cuisine: label, recipes: total, spices };
+    }).filter((c) => c.recipes >= 20)
+      .sort((a, b) => b.recipes - a.recipes);
+    const data = { cuisines };
+    SPICE_CACHE = { t: Date.now(), data };
+    res.json(data);
+  } catch {
+    res.json({ cuisines: [] });
   }
 });
 
