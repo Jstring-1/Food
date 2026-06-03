@@ -158,8 +158,12 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
   border-radius: 10px; padding: 1px 8px; }
 .r-nutri { background: #0e0e14; border: 1px solid #2a2a3a; border-radius: 8px; padding: .6rem .8rem;
   margin-bottom: 1rem; max-width: 360px; }
-.r-nutri h3 { margin: 0 0 .3rem; font-size: .95rem; }
-.r-nutri h3 span { color: #8a8aa0; font-weight: 400; font-size: .75rem; }
+.r-nutri > summary { cursor: pointer; font-size: .95rem; font-weight: 700; list-style: none; user-select: none; }
+.r-nutri > summary::-webkit-details-marker { display: none; }
+.r-nutri > summary::before { content: '▸ '; color: #6e6eff; }
+.r-nutri[open] > summary::before { content: '▾ '; }
+.r-nutri > summary span { color: #8a8aa0; font-weight: 400; font-size: .75rem; }
+.r-nutri[open] table { margin-top: .3rem; }
 .r-nutri table { width: 100%; border-collapse: collapse; }
 .r-nutri td { font-size: .85rem; padding: 1px 0; border-bottom: 1px solid #1e1e2a; color: #d8d8e4; }
 .r-nutri td:last-child { text-align: right; color: #fff; white-space: nowrap; }
@@ -174,7 +178,10 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
 .r-src .meta { font-size: .68rem; }
 
 /* ── FDA-style Nutrition Facts label ───────────────────────────── */
-.label-panel { }
+.label-panel { position: relative; }
+.panel-close { position: absolute; top: 2px; right: 2px; z-index: 3; width: 26px; height: 26px;
+  background: #20202c; color: #c9c9e0; border: 1px solid #33334a; border-radius: 6px; cursor: pointer; }
+.panel-close:hover { border-color: #6e6eff; }
 .nf {
   position: relative;
   background: #fff; color: #000; width: 100%; max-width: 320px;

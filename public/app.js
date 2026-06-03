@@ -102,19 +102,56 @@ document.querySelectorAll('#recipe-filters select').forEach((el) => {
   el.addEventListener('change', searchRecipes);
 });
 
-// ── Top nav: switch pages without losing each page's state ─────────────────
+// ── Top nav + URL state ────────────────────────────────────────────────────
+// Each page tracks its own URL: a page base (/ or /recipes) when nothing is
+// open, or a detail URL (/food/:src/:id, /recipe/:id) when a label/recipe is
+// open. Switching pages reflects that page's current URL; opening/closing a
+// detail updates it. The active page's URL is what the address bar shows.
 const recipePanel = document.getElementById('recipe-panel');
 const recipeEl = document.getElementById('recipe');
+let activePage = 'food';
+let foodUrl = '/';        // nutrition page URL (/, or /food/:src/:id)
+let recipeUrl = '/recipes'; // recipe page URL (/recipes, or /recipe/:id)
 
-function showPage(p) {
+function syncUrl(push) {
+  const url = activePage === 'food' ? foodUrl : recipeUrl;
+  if (url !== location.pathname) push ? history.pushState({}, '', url) : history.replaceState({}, '', url);
+}
+
+function showPage(p, push = true) {
+  activePage = p;
   document.getElementById('page-food').hidden = p !== 'food';
   document.getElementById('page-recipe').hidden = p !== 'recipe';
   document.getElementById('nav-food').classList.toggle('active', p === 'food');
   document.getElementById('nav-recipe').classList.toggle('active', p === 'recipe');
+  syncUrl(push);
   (p === 'food' ? foodQ : recipeQ).focus();
 }
 document.getElementById('nav-food').addEventListener('click', () => showPage('food'));
 document.getElementById('nav-recipe').addEventListener('click', () => showPage('recipe'));
+
+function closeLabel(push = true) {
+  panelEl.hidden = true;
+  foodUrl = '/';
+  if (activePage === 'food') syncUrl(push);
+}
+function closeRecipe(push = true) {
+  recipePanel.hidden = true;
+  recipeUrl = '/recipes';
+  if (activePage === 'recipe') syncUrl(push);
+}
+document.getElementById('label-close').addEventListener('click', () => closeLabel());
+
+// Back/forward: re-sync the UI to the URL without pushing a new entry.
+window.addEventListener('popstate', () => applyPath(location.pathname));
+function applyPath(path) {
+  const rec = path.match(/^\/recipe\/(\d+)$/);
+  const food = path.match(/^\/food\/([^/]+)\/(.+)$/);
+  if (rec) { showPage('recipe', false); openRecipe(rec[1], false); }
+  else if (path === '/recipes') { showPage('recipe', false); closeRecipe(false); }
+  else if (food) { showPage('food', false); openLabel(decodeURIComponent(food[1]), decodeURIComponent(food[2]), null, false); }
+  else { showPage('food', false); closeLabel(false); }
+}
 
 async function searchRecipes() {
   const v = recipeQ.value.trim();
@@ -145,20 +182,30 @@ async function searchRecipes() {
     a.onclick = (e) => {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
       e.preventDefault();
-      showRecipe(it.id);
-      history.pushState({}, '', a.href);
+      openRecipe(it.id);
     };
     recipeResults.appendChild(a);
   }
 }
 
-async function showRecipe(id) {
+async function openRecipe(id, push = true) {
   recipePanel.hidden = false;
+  recipeUrl = `/recipe/${id}`;
+  if (activePage === 'recipe') syncUrl(push);
   recipeEl.innerHTML = '<p class="meta">loading…</p>';
   const r = await fetch('/api/recipe?id=' + encodeURIComponent(id));
   if (!r.ok) { recipeEl.innerHTML = '<p class="meta">Could not load.</p>'; return; }
-  recipeEl.innerHTML = renderRecipe(await r.json());
+  paintRecipe(await r.json());
   recipeEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Render the recipe and wire the collapsible nutrition (persisted) + close.
+function paintRecipe(d) {
+  recipeEl.innerHTML = renderRecipe(d);
+  const det = recipeEl.querySelector('details.r-nutri');
+  if (det) det.addEventListener('toggle', () => { try { localStorage.setItem('recipeNutriOpen', det.open ? '1' : '0'); } catch { /* ignore */ } });
+  const close = recipeEl.querySelector('.r-close');
+  if (close) close.onclick = () => closeRecipe();
 }
 
 function renderRecipe(d) {
@@ -169,7 +216,7 @@ function renderRecipe(d) {
     d.rating != null ? `★ ${(+d.rating).toFixed(1)}${d.review_count ? ` (${d.review_count} reviews)` : ''}` : '',
     d.minutes != null ? `${d.minutes} min` : '',
   ].filter(Boolean).join(' · ');
-  // Per-serving nutrition card (Food.com only).
+  // Per-serving nutrition card (Food.com only) — collapsible, state remembered.
   let nutri = '';
   if (d.calories != null) {
     const rows = [
@@ -179,13 +226,15 @@ function renderRecipe(d) {
       ['Protein', d.protein_g, 'g', 1],
     ].filter(([, v]) => v != null)
       .map(([l, v, u, dp]) => `<tr><td>${l}</td><td>${(+v).toFixed(dp)}${u}</td></tr>`).join('');
-    nutri = `<div class="r-nutri"><h3>Nutrition <span>per serving</span></h3><table>${rows}</table></div>`;
+    let open = true;
+    try { open = localStorage.getItem('recipeNutriOpen') !== '0'; } catch { /* default open */ }
+    nutri = `<details class="r-nutri"${open ? ' open' : ''}><summary>Nutrition <span>per serving</span></summary><table>${rows}</table></details>`;
   }
   const srcName = d.source === 'foodcom' ? 'Food.com' : 'RecipeNLG';
   const srcLink = d.source_url
     ? `<a href="${esc(d.source_url)}" target="_blank" rel="noopener">View original on ${srcName} ↗</a>` : '';
   return `
-    <button type="button" class="r-close" onclick="document.getElementById('recipe-panel').hidden=true">✕</button>
+    <button type="button" class="r-close">✕</button>
     ${d.image ? `<img class="r-img" src="${esc(d.image)}" alt="${esc(d.title)}" loading="lazy" />` : ''}
     <h1 class="r-title">${esc(d.title)}</h1>
     ${d.category ? `<p class="r-cat">${esc(d.category)}</p>` : ''}
@@ -227,8 +276,7 @@ async function searchFood() {
     b.onclick = (e) => {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; // let new-tab work
       e.preventDefault();
-      showLabel(item.source, item.id, item.variants);
-      history.pushState({}, '', b.href);
+      openLabel(item.source, item.id, item.variants);
     };
     const cmp = document.createElement('button');
     cmp.className = 'cmp-btn';
@@ -284,8 +332,10 @@ async function openCompare() {
 
 document.getElementById('compare-close').onclick = () => { compareModal.hidden = true; };
 
-async function showLabel(source, id, variants) {
+async function openLabel(source, id, variants, push = true) {
   panelEl.hidden = false;
+  foodUrl = `/food/${source}/${encodeURIComponent(id)}`;
+  if (activePage === 'food') syncUrl(push);
   // Merged USDA results expose multiple entries — let the user pick which one.
   let header = '';
   if (variants && variants.length > 1) {
@@ -521,17 +571,17 @@ document.querySelectorAll('footer a[href="/leaders"], footer a[href="/developers
 syncFilterVisibility();
 loadStats();
 
-// On a server-rendered /food/:source/:id page, hydrate the interactive label
-// (serving dropdown, macro ring, %DV) over the crawlable summary.
+// Hydrate from a server-rendered permalink, seeding each page's URL state.
 if (window.__FOOD__) {
   panelEl.hidden = false;
+  foodUrl = location.pathname;
   const body = document.getElementById('label-body');
   if (body) paintLabel(body, window.__FOOD__, 0);
-}
-
-// On a server-rendered /recipe/:id page, switch to the recipe page and render.
-if (window.__RECIPE__) {
-  showPage('recipe');
+} else if (window.__RECIPE__) {
+  recipeUrl = location.pathname;
   recipePanel.hidden = false;
-  recipeEl.innerHTML = renderRecipe(window.__RECIPE__);
+  paintRecipe(window.__RECIPE__);
+  showPage('recipe', false);
+} else if (location.pathname === '/recipes') {
+  showPage('recipe', false);
 }

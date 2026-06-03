@@ -23,6 +23,8 @@ app.use(express.static(PUBLIC_DIR, {
 
 app.get('/', (_req, res) => res.type('html').set('Cache-Control', 'no-cache').send(stamp(SHELL)));
 app.get('/favicon.ico', (_req, res) => res.redirect(301, '/favicon.svg'));
+// Recipe-page base URL (SPA shows the recipe page; direct visits/refresh work).
+app.get('/recipes', (_req, res) => res.type('html').set('Cache-Control', 'no-cache').send(stamp(SHELL)));
 
 function escHtml(s: unknown): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
