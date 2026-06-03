@@ -137,7 +137,7 @@ app.get('/api/search', async (req, res) => {
   const minProtein = numOrNull(req.query.minProtein), maxProtein = numOrNull(req.query.maxProtein);
   const minSugar = numOrNull(req.query.minSugar), maxSugar = numOrNull(req.query.maxSugar);
   const minFat = numOrNull(req.query.minFat), maxFat = numOrNull(req.query.maxFat);
-  const limit = Math.min(60, Math.max(1, Number(req.query.limit) || 40));
+  const limit = Math.min(120, Math.max(1, Number(req.query.limit) || 100));
   const offset = Math.min(400, Math.max(0, Number(req.query.offset) || 0));
   const want = offset + limit;
   // Over-fetch so grouping/dedup still leaves enough for the requested page.
@@ -887,16 +887,33 @@ app.get('/api/dish-spices', async (_req, res) => {
   }
 });
 
+// Meat / fish / shellfish lexemes for the vegetarian filter (dairy & eggs are
+// allowed). Single words, stemmed by to_tsquery; OR-joined into one tsquery.
+// Best-effort: it flags recipes whose ingredients mention any of these.
+const NONVEG_TERMS = [
+  'beef', 'steak', 'brisket', 'veal', 'pork', 'ham', 'hamburger', 'bacon', 'sausage', 'pepperoni',
+  'salami', 'prosciutto', 'pancetta', 'chorizo', 'bratwurst', 'frankfurter', 'bologna', 'hotdog',
+  'chicken', 'turkey', 'duck', 'goose', 'quail', 'hen', 'poultry', 'giblets', 'lamb', 'mutton',
+  'goat', 'venison', 'bison', 'rabbit', 'liver', 'foie',
+  'fish', 'salmon', 'tuna', 'cod', 'tilapia', 'halibut', 'trout', 'sardine', 'anchovy', 'anchovies',
+  'mackerel', 'herring', 'snapper', 'catfish', 'swordfish', 'shrimp', 'prawn', 'prawns', 'crab',
+  'lobster', 'crawfish', 'crayfish', 'clam', 'mussel', 'mussels', 'oyster', 'oysters', 'scallop',
+  'scallops', 'squid', 'octopus', 'calamari', 'escargot', 'snail', 'caviar', 'seafood', 'shellfish',
+  'gelatin', 'gelatine', 'lard', 'suet', 'tallow', 'worcestershire',
+];
+const NONVEG_TSQUERY = NONVEG_TERMS.join(' | ');
+
 app.get('/api/recipes', async (req, res) => {
   const q = String(req.query.q ?? '').trim();
   const category = String(req.query.category ?? '').trim();
+  const veg = req.query.veg === '1';
   // Need either a search term or a category to browse (categories are Food.com).
   if (q.length < 3 && !category) return void res.json({ results: [], hasMore: false });
   const cached = cacheGet('r:' + req.originalUrl);
   if (cached) return void res.json(cached);
   const source = String(req.query.source ?? 'all');
   const sort = String(req.query.sort ?? 'relevance');
-  const limit = Math.min(60, Math.max(1, Number(req.query.limit) || 40));
+  const limit = Math.min(120, Math.max(1, Number(req.query.limit) || 100));
   const offset = Math.min(2000, Math.max(0, Number(req.query.offset) || 0));
   // A comma in the query switches to ingredient search: each comma-separated
   // term must appear in the recipe's ingredients (full-text AND match).
@@ -913,6 +930,12 @@ app.get('/api/recipes', async (req, res) => {
     }
     if (category) { p.push(category); where.push(`category = $${p.length}`); }
     if (source === 'foodcom' || source === 'recipenlg') { p.push(source); where.push(`source = $${p.length}`); }
+    if (veg) {
+      // Must have a listed ingredient list, and none of it mentions meat/fish.
+      p.push(NONVEG_TSQUERY);
+      where.push(`ingredients IS NOT NULL AND jsonb_array_length(ingredients) > 0`);
+      where.push(`NOT (to_tsvector('english', ingredients::text) @@ to_tsquery('english', $${p.length}))`);
+    }
 
     let orderBy = RECIPE_SORT[sort] || '';
     if (!orderBy) {

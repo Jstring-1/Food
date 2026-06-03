@@ -102,7 +102,7 @@ recipeQ.addEventListener('blur', () => triggerRecipe(false));
 document.querySelectorAll('#food-filters select, #food-filters input').forEach((el) => {
   el.addEventListener('change', () => { if (el.id === 'f-source') syncFilterVisibility(); triggerFood(true); });
 });
-document.querySelectorAll('#recipe-filters select').forEach((el) => {
+document.querySelectorAll('#recipe-filters select, #recipe-filters input[type="checkbox"]').forEach((el) => {
   el.addEventListener('change', () => triggerRecipe(true));
 });
 
@@ -137,7 +137,7 @@ function markViewed(key) {
 }
 
 // ── "Load more" button helpers ────────────────────────────────────────────
-const PAGE = 40;
+const PAGE = 100;
 function removeLoadMore(c) { const b = c.querySelector('.load-more'); if (b) b.remove(); }
 function addLoadMore(c, fn) {
   removeLoadMore(c);
@@ -200,6 +200,7 @@ async function searchRecipes(append = false) {
   if (v.length < 3 && !category) { recipeResults.innerHTML = ''; return; }
   const offset = append ? recipeOffset : 0;
   const p = new URLSearchParams({ q: v, category, source: $('r-source').value, sort: $('r-sort').value, limit: PAGE, offset });
+  if ($('r-veg').checked) p.set('veg', '1');
   const r = await fetch('/api/recipes?' + p.toString());
   if (!r.ok) { if (!append) recipeResults.innerHTML = '<div class="empty">…</div>'; return; }
   const { results, hasMore } = await r.json();

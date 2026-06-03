@@ -107,6 +107,8 @@ input[type="search"]:focus { outline: none; border-color: #6e6eff; }
 }
 .filters input[type="number"] { width: 4.5rem; }
 .filters .chk { cursor: pointer; }
+.filters .check { cursor: pointer; }
+.filters .check input { cursor: pointer; }
 .filters .ranges { width: 100%; }
 .filters .ranges summary { cursor: pointer; color: #9aa0ff; font-size: .8rem; }
 .range-grid {
