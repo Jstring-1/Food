@@ -176,6 +176,8 @@ document.getElementById('label-close').addEventListener('click', () => closeLabe
 // Back/forward: re-sync the UI to the URL without pushing a new entry.
 window.addEventListener('popstate', () => applyPath(location.pathname));
 function applyPath(path) {
+  if (path === '/spices') { showPage('recipe', false); openCuisineSpices(false); return; }
+  infoModal.hidden = true; // navigating anywhere else closes the spices popup
   const rec = path.match(/^\/recipe\/(\d+)$/);
   const food = path.match(/^\/food\/([^/]+)\/(.+)$/);
   if (rec) { showPage('recipe', false); openRecipe(rec[1], false); }
@@ -630,8 +632,13 @@ function wireInfoLinks() {
   });
 }
 
-document.getElementById('info-close').onclick = () => { infoModal.hidden = true; };
-infoModal.onclick = (e) => { if (e.target === infoModal) infoModal.hidden = true; };
+function closeInfoModal() {
+  infoModal.hidden = true;
+  // The spices popup owns /spices; closing it returns to the page underneath.
+  if (location.pathname === '/spices') { history.pushState({}, '', recipeUrl); applyTitle(); }
+}
+document.getElementById('info-close').onclick = closeInfoModal;
+infoModal.onclick = (e) => { if (e.target === infoModal) closeInfoModal(); };
 
 // ── Flagged-additive popup: blurb + links to scientific study searches.
 function openAdditiveInfo(term) {
@@ -697,9 +704,15 @@ function openSugarInfo(grams, servingGrams) {
   infoContent.scrollTop = 0;
 }
 
-// ── Top spices by cuisine popup (Food.com cuisine categories).
+// ── Top spices by cuisine popup (Food.com cuisine categories). Has its own
+// URL (/spices) so it can be linked and reopened on load.
+const SPICE_TITLE = 'Top spices by cuisine — FoodLand.fyi';
 let SPICE_DATA = null;
-async function openCuisineSpices() {
+async function openCuisineSpices(push = true) {
+  // Assert /spices as the URL. push=true for a fresh open; replace when arriving
+  // via popstate/hydration (showPage already reset the URL to the page base).
+  if (location.pathname !== '/spices') history[push ? 'pushState' : 'replaceState']({}, '', '/spices');
+  document.title = SPICE_TITLE;
   infoModal.hidden = false;
   infoContent.innerHTML = '<p class="meta" style="padding:1rem">Loading…</p>';
   infoContent.scrollTop = 0;
@@ -713,7 +726,6 @@ async function openCuisineSpices() {
     infoContent.innerHTML = `
       <div class="spice-pop">
         <h2>Top spices by cuisine</h2>
-        <p class="spice-intro">Share of each cuisine's recipes that use a given spice or herb. Based on Food.com recipes tagged by cuisine.</p>
         <div class="cuisine-grid">${cards || '<p class="meta">No data.</p>'}</div>
       </div>`;
     infoContent.scrollTop = 0;
@@ -721,7 +733,7 @@ async function openCuisineSpices() {
     infoContent.innerHTML = '<p class="meta" style="padding:1rem">Could not load.</p>';
   }
 }
-$('spice-btn')?.addEventListener('click', openCuisineSpices);
+$('spice-btn')?.addEventListener('click', () => openCuisineSpices());
 
 document.addEventListener('click', (e) => {
   if (!e.target.closest) return;
@@ -756,4 +768,7 @@ if (window.__FOOD__) {
   showPage('recipe', false);
 } else if (location.pathname === '/recipes') {
   showPage('recipe', false);
+} else if (location.pathname === '/spices') {
+  showPage('recipe', false);
+  openCuisineSpices(false);
 }

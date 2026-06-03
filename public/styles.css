@@ -362,8 +362,7 @@ ul.sugar-eq li { color: #d6d6e2; padding: .2rem 0; }
 .link-btn { background: none; border: none; color: #aab4ff; cursor: pointer; font: inherit;
   padding: 0; align-self: flex-end; text-decoration: underline; text-underline-offset: 2px; }
 .link-btn:hover { color: #6e6eff; }
-.spice-pop h2 { margin: 0 0 .4rem; font-size: 1.25rem; }
-.spice-intro { color: #9a9ab0; font-size: 12px; margin: 0 0 1rem; }
+.spice-pop h2 { margin: 0 0 1rem; font-size: 1.25rem; }
 .cuisine-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
 .cuisine-card { border: 1px solid #2a2a3c; border-radius: 8px; padding: .75rem .9rem; }
 .cuisine-card h3 { margin: 0 0 .5rem; font-size: 1rem; color: #e6e6ef; }

@@ -25,6 +25,8 @@ app.get('/', (_req, res) => res.type('html').set('Cache-Control', 'no-cache').se
 app.get('/favicon.ico', (_req, res) => res.redirect(301, '/favicon.svg'));
 // Recipe-page base URL (SPA shows the recipe page; direct visits/refresh work).
 app.get('/recipes', (_req, res) => res.type('html').set('Cache-Control', 'no-cache').send(stamp(SHELL)));
+// Spices-by-cuisine popup URL (SPA opens the popup over the recipe page).
+app.get('/spices', (_req, res) => res.type('html').set('Cache-Control', 'no-cache').send(stamp(SHELL)));
 
 function escHtml(s: unknown): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
@@ -761,6 +763,25 @@ const SPICE_VOCAB: { label: string; terms: string[]; not?: string[] }[] = [
   { label: 'Caraway', terms: ['caraway'] },
 ];
 
+// Heuristic: does a recipe title denote a dessert/sweet? Used to drop them from
+// the cuisine spice profiles. Guards keep savory "crab cake", "pot pie", etc.
+const DESSERT_WORDS = ['cookie', 'dessert', 'pudding', 'custard', 'brownie', 'fudge', 'candy', 'cheesecake',
+  'frosting', 'icing', 'truffle', 'macaron', 'macaroon', 'cupcake', 'cobbler', 'crumble', 'mousse', 'sorbet',
+  'gelato', 'ice cream', 'baklava', 'halva', 'halwa', 'kheer', 'gulab jamun', 'scone', 'muffin', 'sundae',
+  'parfait', 'meringue', 'marzipan', 'praline', 'eclair', 'tiramisu', 'flan', 'churro', 'sweet roll',
+  'doughnut', 'donut', 'toffee', 'caramel', 'shortbread', 'gingerbread'];
+const CAKE_SAVORY = ['crab cake', 'fish cake', 'rice cake', 'corn cake', 'potato cake', 'pancake', 'salmon cake',
+  'tuna cake', 'cod cake', 'funnel cake', 'johnny cake', 'hoe cake', 'oat cake', 'bean cake', 'lentil cake'];
+const PIE_SAVORY = ['pot pie', 'shepherd', 'shepard', 'cottage pie', 'meat pie', 'chicken pie', 'beef pie',
+  'fish pie', 'savory', 'savoury', 'pasty', 'quiche', 'tamale pie', 'frito pie', 'hand pie'];
+function isDessertTitle(title: string): boolean {
+  const s = title.toLowerCase();
+  if (DESSERT_WORDS.some((w) => s.includes(w))) return true;
+  if (s.includes('cake') && !CAKE_SAVORY.some((w) => s.includes(w))) return true;
+  if (s.includes('pie') && !PIE_SAVORY.some((w) => s.includes(w))) return true;
+  return false;
+}
+
 let SPICE_CACHE: { t: number; data: any } | null = null;
 app.get('/api/cuisine-spices', async (_req, res) => {
   if (SPICE_CACHE && Date.now() - SPICE_CACHE.t < 6 * 60 * 60 * 1000) {
@@ -769,13 +790,16 @@ app.get('/api/cuisine-spices', async (_req, res) => {
   try {
     const cats = CUISINES.map((c) => c.cat);
     const r = await pool.query(
-      `SELECT category, ingredients FROM recipe WHERE category = ANY($1) AND ingredients IS NOT NULL`,
+      `SELECT category, title, ingredients FROM recipe WHERE category = ANY($1) AND ingredients IS NOT NULL`,
       [cats]);
-    // Tally, per cuisine, how many recipes use each spice.
+    // Tally, per cuisine, how many recipes use each spice. Dessert/sweet recipes
+    // are excluded so baking spices (cinnamon, vanilla, nutmeg) don't skew the
+    // savory profile — detected by title, since cuisine is the only category.
     const totals = new Map<string, number>();
     const counts = new Map<string, Map<string, number>>();
     for (const c of cats) { totals.set(c, 0); counts.set(c, new Map()); }
     for (const row of r.rows) {
+      if (isDessertTitle(String(row.title || ''))) continue;
       const cat = row.category as string;
       const lines: string[] = (row.ingredients || []).map((x: unknown) => String(x).toLowerCase());
       if (!lines.length) continue;
@@ -791,7 +815,7 @@ app.get('/api/cuisine-spices', async (_req, res) => {
       const spices = [...(counts.get(cat) || new Map()).entries()]
         .map(([name, n]) => ({ name, pct: Math.round((n / Math.max(total, 1)) * 100) }))
         .sort((a, b) => b.pct - a.pct)
-        .slice(0, 12);
+        .slice(0, 15);
       return { cuisine: label, recipes: total, spices };
     }).filter((c) => c.recipes >= 20)
       .sort((a, b) => b.recipes - a.recipes);
