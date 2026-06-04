@@ -16,6 +16,7 @@
     "ingest:recipes:foodcom": "tsx src/ingest/recipes-foodcom.ts",
     "ingest:recipes:nlg": "tsx src/ingest/recipes-nlg.ts",
     "backfill:recipe-units": "tsx src/maintenance/backfill-recipe-units.ts",
+    "backfill:recipe-meat": "tsx src/maintenance/backfill-recipe-meat.ts",
     "dedupe:fdc": "tsx src/maintenance/dedupe-fdc.ts",
     "denormalize:fdc": "tsx src/maintenance/run-denormalize.ts",
     "warm:logos": "tsx src/maintenance/warm-logos.ts",

@@ -24,24 +24,17 @@
   </header>
 
   <nav class="page-nav">
-    <button type="button" id="nav-food" class="nav-btn active" aria-current="page">Nutrition</button>
-    <button type="button" id="nav-recipe" class="nav-btn">Recipes</button>
+    <button type="button" id="nav-food" class="nav-btn">Nutrition</button>
+    <button type="button" id="nav-recipe" class="nav-btn active" aria-current="page">Recipes</button>
   </nav>
 
   <main>
     <!-- ── Nutrition page ─────────────────────────────────────── -->
-    <div class="page" id="page-food">
+    <div class="page" id="page-food" hidden>
       <section class="search">
-        <input id="q-food" type="search" placeholder="Search foods or scan a barcode — e.g. cheddar, banana, 884853601023…" autofocus />
+        <input id="q-food" type="search" placeholder="Search foods or scan a barcode — e.g. cheddar, banana, 884853601023…" />
 
         <div class="filters" id="food-filters">
-          <label>Source
-            <select id="f-source">
-              <option value="all">All</option>
-              <option value="usda">USDA</option>
-              <option value="off">Open Food Facts</option>
-            </select>
-          </label>
           <label data-when="not-off">USDA type
             <select id="f-usdatype">
               <option value="all">All</option>
@@ -86,21 +79,14 @@
     </div>
 
     <!-- ── Recipe page ────────────────────────────────────────── -->
-    <div class="page" id="page-recipe" hidden>
+    <div class="page" id="page-recipe">
       <section class="search">
-        <input id="q-recipe" type="search" placeholder="Search by title (banana bread) or by ingredients, comma-separated (chicken, basil, garlic)" />
+        <input id="q-recipe" type="search" placeholder="Search by title (banana bread) or by ingredients, comma-separated (chicken, basil, garlic)" autofocus />
 
         <div class="filters" id="recipe-filters">
           <label>Category
             <select id="r-category">
               <option value="">All categories</option>
-            </select>
-          </label>
-          <label>Source
-            <select id="r-source">
-              <option value="all">All</option>
-              <option value="foodcom">Food.com</option>
-              <option value="recipenlg">RecipeNLG</option>
             </select>
           </label>
           <label>Sort

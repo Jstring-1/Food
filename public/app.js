@@ -63,7 +63,6 @@ const isBarcode = (s) => /^\d{6,14}$/.test(s);
 // Read the filter controls into URLSearchParams for /api/search.
 function readFilters(q) {
   const p = new URLSearchParams({ q });
-  p.set('source', $('f-source').value);
   p.set('usdatype', $('f-usdatype').value);
   p.set('sort', $('f-sort').value);
   p.set('hideEmpty', '1'); // always hide entries with no nutrition
@@ -73,9 +72,9 @@ function readFilters(q) {
   return p;
 }
 
-// Show/hide source-specific filters.
+// Show/hide source-specific filters (source dropdown removed → always 'all').
 function syncFilterVisibility() {
-  const s = $('f-source').value;
+  const s = $('f-source') ? $('f-source').value : 'all';
   document.querySelectorAll('[data-when="not-off"]').forEach((el) => (el.style.display = s === 'off' ? 'none' : ''));
   document.querySelectorAll('[data-when="not-usda"]').forEach((el) => (el.style.display = s === 'usda' ? 'none' : ''));
 }
@@ -113,9 +112,9 @@ document.querySelectorAll('#recipe-filters select, #recipe-filters input[type="c
 // detail updates it. The active page's URL is what the address bar shows.
 const recipePanel = document.getElementById('recipe-panel');
 const recipeEl = document.getElementById('recipe');
-let activePage = 'food';
-let foodUrl = '/';        // nutrition page URL (/, or /food/:src/:id)
-let recipeUrl = '/recipes'; // recipe page URL (/recipes, or /recipe/:id)
+let activePage = 'recipe';   // recipes is the default landing page
+let foodUrl = '/nutrition';  // nutrition page URL (/nutrition, or /food/:src/:id)
+let recipeUrl = '/';         // recipe page URL (/, or /recipe/:id)
 
 function syncUrl(push) {
   const url = activePage === 'food' ? foodUrl : recipeUrl;
@@ -163,12 +162,12 @@ document.getElementById('nav-recipe').addEventListener('click', () => showPage('
 
 function closeLabel(push = true) {
   panelEl.hidden = true;
-  foodUrl = '/'; foodTitle = BASE_TITLE;
+  foodUrl = '/nutrition'; foodTitle = BASE_TITLE;
   if (activePage === 'food') { syncUrl(push); applyTitle(); }
 }
 function closeRecipe(push = true) {
   recipePanel.hidden = true;
-  recipeUrl = '/recipes'; recipeTitle = RECIPE_TITLE;
+  recipeUrl = '/'; recipeTitle = RECIPE_TITLE;
   if (activePage === 'recipe') { syncUrl(push); applyTitle(); }
 }
 document.getElementById('label-close').addEventListener('click', () => closeLabel());
@@ -182,9 +181,9 @@ function applyPath(path) {
   const rec = path.match(/^\/recipe\/(\d+)$/);
   const food = path.match(/^\/food\/([^/]+)\/(.+)$/);
   if (rec) { showPage('recipe', false); openRecipe(rec[1], false); }
-  else if (path === '/recipes') { showPage('recipe', false); closeRecipe(false); }
   else if (food) { showPage('food', false); openLabel(decodeURIComponent(food[1]), decodeURIComponent(food[2]), null, false); }
-  else { showPage('food', false); closeLabel(false); }
+  else if (path === '/nutrition') { showPage('food', false); closeLabel(false); }
+  else { showPage('recipe', false); closeRecipe(false); } // '/', '/recipes', or unknown
 }
 
 // Populate the category browse dropdown once.
@@ -199,7 +198,7 @@ async function searchRecipes(append = false) {
   const category = $('r-category').value;
   if (v.length < 3 && !category) { recipeResults.innerHTML = ''; return; }
   const offset = append ? recipeOffset : 0;
-  const p = new URLSearchParams({ q: v, category, source: $('r-source').value, sort: $('r-sort').value, limit: PAGE, offset });
+  const p = new URLSearchParams({ q: v, category, sort: $('r-sort').value, limit: PAGE, offset });
   if ($('r-veg').checked) p.set('veg', '1');
   const r = await fetch('/api/recipes?' + p.toString());
   if (!r.ok) { if (!append) recipeResults.innerHTML = '<div class="empty">…</div>'; return; }
@@ -225,7 +224,6 @@ function makeRecipeRow(it) {
   const thumb = it.image ? `<img class="result-logo r-thumb" src="${esc(it.image)}" alt="" loading="lazy" />` : '';
   a.innerHTML = thumb +
     `<span class="result-main">` +
-      `<span class="badge recipe">${it.source === 'foodcom' ? 'Food.com' : 'RecipeNLG'}</span>` +
       `<span class="title">${esc(it.title)}</span>` +
       `<div class="sub">${esc(meta)}</div>` +
     `</span>`;
@@ -343,7 +341,6 @@ function makeFoodRow(item) {
   const logo = item.brand ? `<img class="result-logo" data-brand="${esc(item.brand)}" alt="" hidden />` : '';
   b.innerHTML = logo +
     `<span class="result-main">` +
-      `<span class="badge ${item.source}">${item.source}</span>` +
       `<span class="title">${esc(item.title)}</span>${grade}${giChip}` +
       `<div class="sub">${esc(item.sub || '')}${kcal}${vc}</div>` +
     `</span>`;
@@ -763,10 +760,11 @@ document.querySelectorAll('footer a[href="/leaders"], footer a[href="/developers
 
 syncFilterVisibility();
 
-// Hydrate from a server-rendered permalink, seeding each page's URL state.
+// Hydrate from a server-rendered permalink, else route by the current path.
 if (window.__FOOD__) {
   panelEl.hidden = false;
   foodUrl = location.pathname;
+  showPage('food', false);
   const body = document.getElementById('label-body');
   if (body) paintLabel(body, window.__FOOD__, 0);
 } else if (window.__RECIPE__) {
@@ -774,12 +772,6 @@ if (window.__FOOD__) {
   recipePanel.hidden = false;
   paintRecipe(window.__RECIPE__);
   showPage('recipe', false);
-} else if (location.pathname === '/recipes') {
-  showPage('recipe', false);
-} else if (location.pathname === '/spices') {
-  showPage('recipe', false);
-  openSpices('cuisine', false);
-} else if (location.pathname === '/spices/dishes') {
-  showPage('recipe', false);
-  openSpices('dish', false);
+} else {
+  applyPath(location.pathname);
 }

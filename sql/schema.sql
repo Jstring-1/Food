@@ -178,10 +178,18 @@ ALTER TABLE recipe ADD COLUMN IF NOT EXISTS image          TEXT;
 ALTER TABLE recipe ADD COLUMN IF NOT EXISTS category       TEXT;
 ALTER TABLE recipe ADD COLUMN IF NOT EXISTS cholesterol_mg DOUBLE PRECISION;
 ALTER TABLE recipe ADD COLUMN IF NOT EXISTS fiber_g        DOUBLE PRECISION;
+-- Precomputed vegetarian flag (true = ingredients mention meat/fish; false =
+-- none found; NULL = no ingredient list, treated as unknown). Populated by
+-- `npm run backfill:recipe-meat`. Avoids recomputing the ingredient FTS per row.
+ALTER TABLE recipe ADD COLUMN IF NOT EXISTS has_meat       BOOLEAN;
 
 CREATE INDEX IF NOT EXISTS recipe_title_trgm ON recipe USING gin (title gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS recipe_source_idx ON recipe (source);
 CREATE INDEX IF NOT EXISTS recipe_rating_idx ON recipe (rating);
--- Ingredient full-text search (comma-separated ingredient queries). The
--- expression must match the query: to_tsvector('english', ingredients::text).
-CREATE INDEX IF NOT EXISTS recipe_ing_fts ON recipe USING gin (to_tsvector('english', ingredients::text));
+-- Ingredient full-text search (comma-separated ingredient queries + vegetarian
+-- filter). Source text has literal "\t" escapes and missing spaces around
+-- punctuation, so strip backslash-escapes then turn non-letters into spaces;
+-- otherwise "lb.shrimp,peeled" never yields a "shrimp" lexeme. The query
+-- expression must match this exactly.
+CREATE INDEX IF NOT EXISTS recipe_ing_fts ON recipe USING gin
+  (to_tsvector('english', regexp_replace(regexp_replace(ingredients::text, '\\[a-zA-Z]', ' ', 'g'), '[^[:alpha:]]+', ' ', 'g')));

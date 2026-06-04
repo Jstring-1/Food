@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import express from 'express';
 import { pool } from './db.js';
 import { resolveLogo, brandKey } from './logo.js';
+import { ING_TSV } from './recipe-filters.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -23,8 +24,10 @@ app.use(express.static(PUBLIC_DIR, {
 
 app.get('/', (_req, res) => res.type('html').set('Cache-Control', 'no-cache').send(stamp(SHELL)));
 app.get('/favicon.ico', (_req, res) => res.redirect(301, '/favicon.svg'));
-// Recipe-page base URL (SPA shows the recipe page; direct visits/refresh work).
+// Page base URLs (SPA renders the right page; direct visits/refresh work).
+// '/' is the recipes landing page; '/nutrition' is the food page.
 app.get('/recipes', (_req, res) => res.type('html').set('Cache-Control', 'no-cache').send(stamp(SHELL)));
+app.get('/nutrition', (_req, res) => res.type('html').set('Cache-Control', 'no-cache').send(stamp(SHELL)));
 // Spices popup URLs (SPA opens the popup over the recipe page).
 app.get('/spices', (_req, res) => res.type('html').set('Cache-Control', 'no-cache').send(stamp(SHELL)));
 app.get('/spices/dishes', (_req, res) => res.type('html').set('Cache-Control', 'no-cache').send(stamp(SHELL)));
@@ -887,22 +890,6 @@ app.get('/api/dish-spices', async (_req, res) => {
   }
 });
 
-// Meat / fish / shellfish lexemes for the vegetarian filter (dairy & eggs are
-// allowed). Single words, stemmed by to_tsquery; OR-joined into one tsquery.
-// Best-effort: it flags recipes whose ingredients mention any of these.
-const NONVEG_TERMS = [
-  'beef', 'steak', 'brisket', 'veal', 'pork', 'ham', 'hamburger', 'bacon', 'sausage', 'pepperoni',
-  'salami', 'prosciutto', 'pancetta', 'chorizo', 'bratwurst', 'frankfurter', 'bologna', 'hotdog',
-  'chicken', 'turkey', 'duck', 'goose', 'quail', 'hen', 'poultry', 'giblets', 'lamb', 'mutton',
-  'goat', 'venison', 'bison', 'rabbit', 'liver', 'foie',
-  'fish', 'salmon', 'tuna', 'cod', 'tilapia', 'halibut', 'trout', 'sardine', 'anchovy', 'anchovies',
-  'mackerel', 'herring', 'snapper', 'catfish', 'swordfish', 'shrimp', 'prawn', 'prawns', 'crab',
-  'lobster', 'crawfish', 'crayfish', 'clam', 'mussel', 'mussels', 'oyster', 'oysters', 'scallop',
-  'scallops', 'squid', 'octopus', 'calamari', 'escargot', 'snail', 'caviar', 'seafood', 'shellfish',
-  'gelatin', 'gelatine', 'lard', 'suet', 'tallow', 'worcestershire',
-];
-const NONVEG_TSQUERY = NONVEG_TERMS.join(' | ');
-
 app.get('/api/recipes', async (req, res) => {
   const q = String(req.query.q ?? '').trim();
   const category = String(req.query.category ?? '').trim();
@@ -924,18 +911,16 @@ app.get('/api/recipes', async (req, res) => {
     const where: string[] = [];
     if (byIngredient) {
       p.push(ingTerms.join(' ')); // plainto_tsquery ANDs all the words
-      where.push(`to_tsvector('english', ingredients::text) @@ plainto_tsquery('english', $${p.length})`);
+      where.push(`${ING_TSV} @@ plainto_tsquery('english', $${p.length})`);
     } else if (q.length >= 3) {
       p.push(`%${q}%`); where.push(`title ILIKE $${p.length}`);
     }
     if (category) { p.push(category); where.push(`category = $${p.length}`); }
     if (source === 'foodcom' || source === 'recipenlg') { p.push(source); where.push(`source = $${p.length}`); }
-    if (veg) {
-      // Must have a listed ingredient list, and none of it mentions meat/fish.
-      p.push(NONVEG_TSQUERY);
-      where.push(`ingredients IS NOT NULL AND jsonb_array_length(ingredients) > 0`);
-      where.push(`NOT (to_tsvector('english', ingredients::text) @@ to_tsquery('english', $${p.length}))`);
-    }
+    // Vegetarian uses a precomputed boolean (has_meat) so it's a cheap filter
+    // instead of recomputing the ingredient FTS per row. NULL = unknown/no
+    // ingredient list, which is excluded.
+    if (veg) where.push(`has_meat = false`);
 
     let orderBy = RECIPE_SORT[sort] || '';
     if (!orderBy) {
